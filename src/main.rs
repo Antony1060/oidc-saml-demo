@@ -10,13 +10,16 @@ mod state;
 mod routes;
 mod templates;
 mod models;
+mod sso;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     setup_tracing();
 
     let env = init_env()?;
 
     let state = Arc::new(AppState {
+        oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
         environment: env
     });
 

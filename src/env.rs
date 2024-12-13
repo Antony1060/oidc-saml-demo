@@ -3,7 +3,7 @@ use tracing::warn;
 
 const DEFAULT_SCOPES: [&'static str; 2] = ["openid", "cn"];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OidcConfig {
     pub configuration_url: String,
     pub client_id: String,
