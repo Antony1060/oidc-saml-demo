@@ -26,16 +26,11 @@ impl Display for LoginMethod {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub enum LoginSessionData {
+    #[default]
     None,
     OIDC(OidcAuthorization),
-}
-
-impl Default for LoginSessionData {
-    fn default() -> Self {
-        LoginSessionData::None
-    }
 }
 
 pub struct LoginSession {

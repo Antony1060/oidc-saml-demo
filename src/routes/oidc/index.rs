@@ -37,8 +37,6 @@ pub async fn handle(
                 })
                 .collect::<HashMap<String, String>>();
 
-            dbg!(&userinfo);
-
             let a = LoggedInTemplate {
                 username: userinfo.get("name").map_or("unknown", |v| v).to_string(),
                 login_method: LoginMethod::OIDC,

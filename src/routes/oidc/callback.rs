@@ -24,6 +24,16 @@ pub async fn handle(
         }
     };
 
+    if !state.oidc.validate_jwt(&authorized.access_token).await
+        || !state.oidc.validate_jwt(&authorized.id_token).await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to validate access_token and id_token with provider JWKS",
+        )
+            .into_response();
+    }
+
     let res =
         LoginSession::update_session(&session.session, &LoginSessionData::OIDC(authorized)).await;
 

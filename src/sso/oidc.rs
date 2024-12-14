@@ -1,7 +1,10 @@
 use crate::env::OidcConfig;
+use jsonwebtoken::{Algorithm, Validation};
+use jwks::Jwks;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
+use tracing::debug;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OidcProviderConfiguration {
@@ -15,10 +18,11 @@ pub struct OidcProviderConfiguration {
     scopes_supported: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OidcProvider {
     provider_config: OidcProviderConfiguration,
     config: OidcConfig,
+    jwks: Jwks,
     http_client: reqwest::Client,
 }
 
@@ -26,6 +30,9 @@ pub struct OidcProvider {
 pub enum OidcSetupError {
     #[error("Failed to fetch OIDC provider configuration: {0}")]
     HttpError(#[from] reqwest::Error),
+
+    #[error("Failed to get JWKS: {0}")]
+    JwksError(#[from] jwks::JwksError),
 
     #[error("OIDC provider configuration validation failed: {0}")]
     ValidationError(String),
@@ -83,6 +90,7 @@ impl OidcProvider {
         let client = reqwest::Client::new();
 
         Ok(OidcProvider {
+            jwks: Jwks::from_jwks_url(&provider_config.jwks_uri).await?,
             provider_config,
             config: config.clone(),
             http_client: client,
@@ -109,6 +117,30 @@ impl OidcProvider {
         )
     }
 
+    pub async fn validate_jwt(&self, jwt: &str) -> bool {
+        let Ok(header) = jsonwebtoken::decode_header(jwt) else {
+            debug!("Failed to decode JWT header");
+            return false;
+        };
+
+        let Some(kid) = header.kid else {
+            debug!("JWT header missing kid");
+            return false;
+        };
+
+        let Some(key) = self.jwks.keys.get(&kid) else {
+            debug!("JWT refers to unknown key id: {}", kid);
+            return false;
+        };
+
+        // TODO: dynamic algorithm
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.validate_aud = false;
+
+        // TODO: figure out a better decoding type
+        jsonwebtoken::decode::<serde_json::Value>(jwt, &key.decoding_key, &validation).is_ok()
+    }
+
     pub async fn authorize(&self, code: &str) -> Result<OidcAuthorization, reqwest::Error> {
         let data = self
             .http_client
@@ -124,8 +156,6 @@ impl OidcProvider {
             .await?
             .json::<OidcAuthorization>()
             .await?;
-
-        dbg!(&data);
 
         Ok(data)
     }
@@ -148,8 +178,6 @@ impl OidcProvider {
             .await?
             .json::<HashMap<String, serde_json::Value>>()
             .await?;
-
-        dbg!(&data);
 
         Ok(data)
     }
