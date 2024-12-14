@@ -16,6 +16,7 @@
         }
 
         body {
+            color: white;
             background-color: #040404;
         }
     </style>
@@ -23,12 +24,17 @@
     <title>OIDC SAML Demo</title>
 </head>
 <body>
-<span>Logged in as {{ username }} ({{ login_method }})</span>
-<div>
-    {% for (key, value) in scope_values %}
-    <span>{{ key }}: {{ value }}</span>
-    {% endfor %}
+<div class="w-full h-screen flex items-center justify-center">
+    <div class="flex flex-col gap-2 items-center p-8 bg-neutral-800 rounded">
+        <span>Logged in as <b>{{ username }}</b> ({{ login_method }})</span>
+        <div class="w-full flex flex-col items-start">
+            {% for (key, value) in scope_values %}
+            <span><b>{{ key }}</b>: {{ value }}</span>
+            {% endfor %}
+        </div>
+        <a href="/oidc/logout"
+           class="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full text-center">Logout</a>
+    </div>
 </div>
-<a href="/oidc/logout">Logout</a>
 </body>
 </html>

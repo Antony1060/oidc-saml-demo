@@ -1,10 +1,11 @@
 use crate::env::init_env;
 use crate::state::AppState;
 use crate::tracing::setup_tracing;
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
-use tower_http::services::ServeDir;
+use tower_sessions::cookie::SameSite;
+use tower_sessions::{MemoryStore, SessionManagerLayer};
 use ::tracing::info;
 
 mod env;
@@ -26,6 +27,9 @@ async fn main() -> anyhow::Result<()> {
         environment: env,
     });
 
+    let session_layer =
+        SessionManagerLayer::new(MemoryStore::default()).with_same_site(SameSite::Lax);
+
     let app = Router::new()
         .route("/", get(routes::oidc::index::handle))
         .nest(
@@ -35,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
                 .route("/callback", get(routes::oidc::callback::handle))
                 .route("/logout", get(routes::oidc::logout::handle)),
         )
+        .layer(session_layer)
         .with_state(state.clone());
 
     let listener =

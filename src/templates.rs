@@ -9,7 +9,7 @@ pub struct LoginTemplate;
 #[derive(Template, Serialize)]
 #[template(path = "logged-in.html")]
 pub struct LoggedInTemplate {
-    username: String,
-    login_method: LoginMethod,
-    scope_values: Vec<(String, String)>,
+    pub username: String,
+    pub login_method: LoginMethod,
+    pub scope_values: Vec<(String, String)>,
 }

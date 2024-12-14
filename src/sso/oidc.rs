@@ -1,7 +1,7 @@
 use crate::env::OidcConfig;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use thiserror::Error;
-use tracing::field::debug;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OidcProviderConfiguration {
@@ -67,11 +67,18 @@ impl OidcProviderConfiguration {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OidcAuthorization {
+    pub id_token: String,
+    pub access_token: String,
+    pub token_type: String,
+}
+
 impl OidcProvider {
     pub async fn new(config: &OidcConfig) -> Result<OidcProvider, OidcSetupError> {
         let provider_config = OidcProviderConfiguration::from_url(&config.configuration_url)
             .await?
-            .validate(&config)?;
+            .validate(config)?;
 
         let client = reqwest::Client::new();
 
@@ -92,13 +99,58 @@ impl OidcProvider {
         )
     }
 
-    pub fn logout_url(&self, id_token: String) -> String {
+    pub fn logout_url(&self, id_token: &str) -> String {
         format!(
-            "{}?id_token_hind={}client_id={}&redirect_uri={}",
+            "{}?id_token_hint={}&client_id={}&post_logout_redirect_uri={}",
             self.provider_config.end_session_endpoint,
-            urlencoding::encode(&id_token),
+            urlencoding::encode(id_token),
             urlencoding::encode(&self.config.client_id),
             urlencoding::encode(&self.config.logout_redirect_uri)
         )
+    }
+
+    pub async fn authorize(&self, code: &str) -> Result<OidcAuthorization, reqwest::Error> {
+        let data = self
+            .http_client
+            .post(&self.provider_config.token_endpoint)
+            .form(&[
+                ("grant_type", "authorization_code"),
+                ("code", code),
+                ("redirect_uri", &self.config.redirect_uri),
+                ("client_id", &self.config.client_id),
+                ("client_secret", &self.config.client_secret),
+            ])
+            .send()
+            .await?
+            .json::<OidcAuthorization>()
+            .await?;
+
+        dbg!(&data);
+
+        Ok(data)
+    }
+
+    pub async fn userinfo(
+        &self,
+        authorization: &OidcAuthorization,
+    ) -> Result<HashMap<String, serde_json::Value>, reqwest::Error> {
+        let data = self
+            .http_client
+            .get(&self.provider_config.userinfo_endpoint)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!(
+                    "{} {}",
+                    authorization.token_type, authorization.access_token
+                ),
+            )
+            .send()
+            .await?
+            .json::<HashMap<String, serde_json::Value>>()
+            .await?;
+
+        dbg!(&data);
+
+        Ok(data)
     }
 }
