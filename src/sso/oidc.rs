@@ -133,12 +133,14 @@ impl OidcProvider {
             return false;
         };
 
-        // TODO: dynamic algorithm
-        let mut validation = Validation::new(Algorithm::RS256);
+        let mut validation = Validation::new(header.alg);
         validation.validate_aud = false;
 
-        // TODO: figure out a better decoding type
-        jsonwebtoken::decode::<serde_json::Value>(jwt, &key.decoding_key, &validation).is_ok()
+        // TODO: figure out a better way to validate everything without de-serializing payload
+        let decoded =
+            jsonwebtoken::decode::<serde_json::Value>(jwt, &key.decoding_key, &validation);
+
+        decoded.is_ok()
     }
 
     pub async fn authorize(&self, code: &str) -> Result<OidcAuthorization, reqwest::Error> {
