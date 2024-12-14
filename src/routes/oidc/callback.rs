@@ -10,7 +10,7 @@ pub struct CallbackQuery {
     code: String,
 }
 
-pub async fn handle(
+pub async fn handle_callback(
     State(state): State<Arc<AppState>>,
     session: LoginSession,
     Query(query): Query<CallbackQuery>,

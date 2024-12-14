@@ -1,5 +1,5 @@
 use crate::env::OidcConfig;
-use jsonwebtoken::{Algorithm, Validation};
+use jsonwebtoken::Validation;
 use jwks::Jwks;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,6 +26,7 @@ pub struct OidcProvider {
     http_client: reqwest::Client,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Error)]
 pub enum OidcSetupError {
     #[error("Failed to fetch OIDC provider configuration: {0}")]
@@ -40,7 +41,7 @@ pub enum OidcSetupError {
 
 impl OidcProviderConfiguration {
     async fn from_url(url: &str) -> Result<OidcProviderConfiguration, OidcSetupError> {
-        tracing::debug!("Loading OIDC provider configuration at {}", url);
+        debug!("Loading OIDC provider configuration at {}", url);
         Ok(reqwest::get(url).await?.json().await?)
     }
 

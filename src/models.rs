@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use tower_sessions::Session;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Serialize)]
 pub enum LoginMethod {
     OIDC,
-    SAML,
+    _SAML,
 }
 
 impl Display for LoginMethod {
@@ -20,12 +21,13 @@ impl Display for LoginMethod {
             "{}",
             match self {
                 LoginMethod::OIDC => "OpenID Connect",
-                LoginMethod::SAML => "Security Assertion Markup Language",
+                LoginMethod::_SAML => "Security Assertion Markup Language",
             }
         )
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum LoginSessionData {
     #[default]
@@ -40,6 +42,7 @@ pub struct LoginSession {
 
 impl LoginSession {
     const LOGIN_SESSION_KEY: &'static str = "login_session";
+
     pub async fn update_session(
         session: &Session,
         data: &LoginSessionData,

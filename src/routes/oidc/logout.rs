@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::response::{IntoResponse, Redirect};
 use std::sync::Arc;
 
-pub async fn handle(
+pub async fn handle_logout(
     State(state): State<Arc<AppState>>,
     session: LoginSession,
 ) -> impl IntoResponse {

@@ -1,7 +1,7 @@
 use thiserror::Error;
 use tracing::warn;
 
-const DEFAULT_SCOPES: [&'static str; 1] = ["openid"];
+const DEFAULT_SCOPES: [&str; 1] = ["openid"];
 
 #[derive(Debug, Clone)]
 pub struct OidcConfig {
@@ -10,7 +10,7 @@ pub struct OidcConfig {
     pub client_secret: String,
     pub redirect_uri: String,
     pub logout_redirect_uri: String,
-    pub scopes: Vec<String>
+    pub scopes: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -43,7 +43,10 @@ fn init_oidc_config() -> Result<OidcConfig, EnvError> {
             let raw = get_env("OIDC_SCOPES");
 
             let Ok(scopes) = raw else {
-                warn!("env: OIDC_SCOPES not defined, defaulting to: {}", DEFAULT_SCOPES.join(" "));
+                warn!(
+                    "env: OIDC_SCOPES not defined, defaulting to: {}",
+                    DEFAULT_SCOPES.join(" ")
+                );
                 break 'oidc DEFAULT_SCOPES.iter().map(|&it| it.to_string()).collect();
             };
 
@@ -56,8 +59,7 @@ fn init_oidc_config() -> Result<OidcConfig, EnvError> {
             }
 
             scopes
-        }
-
+        },
     })
 }
 
@@ -66,6 +68,6 @@ pub fn init_env() -> Result<Environment, EnvError> {
 
     Ok(Environment {
         port: get_env("PORT")?.parse()?,
-        oidc_config: init_oidc_config()?
+        oidc_config: init_oidc_config()?,
     })
 }

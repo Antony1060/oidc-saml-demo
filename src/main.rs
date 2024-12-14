@@ -31,13 +31,13 @@ async fn main() -> anyhow::Result<()> {
         SessionManagerLayer::new(MemoryStore::default()).with_same_site(SameSite::Lax);
 
     let app = Router::new()
-        .route("/", get(routes::oidc::index::handle))
+        .route("/", get(routes::oidc::index::handle_index))
         .nest(
             "/oidc",
             Router::new()
-                .route("/login", get(routes::oidc::login::handle))
-                .route("/callback", get(routes::oidc::callback::handle))
-                .route("/logout", get(routes::oidc::logout::handle)),
+                .route("/login", get(routes::oidc::login::handle_login))
+                .route("/callback", get(routes::oidc::callback::handle_callback))
+                .route("/logout", get(routes::oidc::logout::handle_logout)),
         )
         .layer(session_layer)
         .with_state(state.clone());
