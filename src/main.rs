@@ -4,6 +4,7 @@ use crate::tracing::setup_tracing;
 use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
+use tower_http::services::ServeDir;
 use ::tracing::info;
 
 mod env;

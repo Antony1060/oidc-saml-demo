@@ -1,5 +1,6 @@
 use crate::templates::LoginTemplate;
+use axum::response::IntoResponse;
 
-pub async fn handle() -> LoginTemplate {
+pub async fn handle() -> impl IntoResponse {
     LoginTemplate
 }

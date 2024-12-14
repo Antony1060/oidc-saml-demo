@@ -5,10 +5,37 @@
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            color: white;
+            background-color: #040404;
+        }
+    </style>
+
     <title>OIDC SAML Demo</title>
 </head>
-<body>
-    <span>Cao</span>
-    <a href="/oidc/login">OIDC Login</a>
+<body class="h-screen">
+<div class="w-full h-screen flex items-center justify-center">
+    <div class="flex flex-col gap-2 items-center p-4 bg-neutral-800 rounded">
+        <span>Cao</span>
+        <a href="/oidc/login"
+           class="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full">
+            OIDC Login
+        </a>
+        <a href="/oidc/login"
+           class="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full">
+            SAML Login
+        </a>
+    </div>
+</div>
 </body>
 </html>

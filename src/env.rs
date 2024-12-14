@@ -1,7 +1,7 @@
 use thiserror::Error;
 use tracing::warn;
 
-const DEFAULT_SCOPES: [&'static str; 2] = ["openid", "cn"];
+const DEFAULT_SCOPES: [&'static str; 1] = ["openid"];
 
 #[derive(Debug, Clone)]
 pub struct OidcConfig {
