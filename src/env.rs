@@ -1,15 +1,22 @@
 use thiserror::Error;
 use tracing::warn;
+use url::Url;
 
 const DEFAULT_SCOPES: [&str; 1] = ["openid"];
+
+#[derive(Debug, Clone)]
+pub struct BaseUrlParts {
+    pub full_url: String,
+    pub path: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct OidcConfig {
     pub configuration_url: String,
     pub client_id: String,
     pub client_secret: String,
-    pub redirect_uri: String,
-    pub logout_redirect_uri: String,
+    pub redirect_uri: BaseUrlParts,
+    pub logout_redirect_uri: BaseUrlParts,
     pub scopes: Vec<String>,
 }
 
@@ -32,13 +39,27 @@ fn get_env(name: &'static str) -> Result<String, EnvError> {
     std::env::var(name).map_err(|_| EnvError::VarError(name))
 }
 
+fn parse_url_parts(var: &'static str, url: &str) -> Result<BaseUrlParts, EnvError> {
+    let url = Url::parse(url).map_err(|err| {
+        warn!("Failed to parse URL: {}", err);
+        EnvError::VarError(var)
+    })?;
+
+    Ok(BaseUrlParts {
+        full_url: url.to_string(),
+        path: url.path().to_string(),
+    })
+}
+
 fn init_oidc_config() -> Result<OidcConfig, EnvError> {
     Ok(OidcConfig {
         configuration_url: get_env("OIDC_CONFIGURATION_URL")?,
         client_id: get_env("OIDC_CLIENT_ID")?,
         client_secret: get_env("OIDC_CLIENT_SECRET")?,
-        redirect_uri: get_env("OIDC_REDIRECT_URI")?,
-        logout_redirect_uri: get_env("OIDC_LOGOUT_REDIRECT_URI")?,
+        redirect_uri: get_env("OIDC_REDIRECT_URI")
+            .and_then(|val| parse_url_parts("OIDC_REDIRECT_URI", &val))?,
+        logout_redirect_uri: get_env("OIDC_LOGOUT_REDIRECT_URI")
+            .and_then(|val| parse_url_parts("OIDC_LOGOUT_REDIRECT_URI", &val))?,
         scopes: 'oidc: {
             let raw = get_env("OIDC_SCOPES");
 

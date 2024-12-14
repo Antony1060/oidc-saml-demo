@@ -103,7 +103,7 @@ impl OidcProvider {
             "{}?client_id={}&response_type=code&redirect_uri={}&scope={}",
             self.provider_config.authorization_endpoint,
             urlencoding::encode(&self.config.client_id),
-            urlencoding::encode(&self.config.redirect_uri),
+            urlencoding::encode(&self.config.redirect_uri.full_url),
             urlencoding::encode(&self.config.scopes.join(" "))
         )
     }
@@ -114,7 +114,7 @@ impl OidcProvider {
             self.provider_config.end_session_endpoint,
             urlencoding::encode(id_token),
             urlencoding::encode(&self.config.client_id),
-            urlencoding::encode(&self.config.logout_redirect_uri)
+            urlencoding::encode(&self.config.logout_redirect_uri.full_url)
         )
     }
 
@@ -151,7 +151,7 @@ impl OidcProvider {
             .form(&[
                 ("grant_type", "authorization_code"),
                 ("code", code),
-                ("redirect_uri", &self.config.redirect_uri),
+                ("redirect_uri", &self.config.redirect_uri.full_url),
                 ("client_id", &self.config.client_id),
                 ("client_secret", &self.config.client_secret),
             ])

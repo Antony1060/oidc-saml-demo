@@ -26,13 +26,13 @@
 <body>
 <div class="w-full h-screen flex items-center justify-center p-4">
     <div class="flex flex-col gap-2 items-center p-8 bg-neutral-800 rounded">
-        <span>Logged in as <b>{{ username }}</b> ({{ login_method }})</span>
+        <span class="w-full text-left">Logged in as <b>{{ username }}</b> ({{ login_method }})</span>
         <div class="w-full flex flex-col items-start">
             {% for (key, value) in scope_values %}
             <span><b>{{ key }}</b>: {{ value }}</span>
             {% endfor %}
         </div>
-        <a href="/oidc/logout"
+        <a href="{{ logout_url }}"
            class="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full text-center">Logout</a>
     </div>
 </div>

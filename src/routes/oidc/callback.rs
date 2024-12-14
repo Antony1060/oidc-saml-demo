@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct CallbackQuery {
-    code: String,
+    code: Option<String>,
 }
 
 pub async fn handle_callback(
@@ -15,7 +15,11 @@ pub async fn handle_callback(
     session: LoginSession,
     Query(query): Query<CallbackQuery>,
 ) -> impl IntoResponse {
-    let authorized = state.oidc.authorize(&query.code).await;
+    let Some(code) = &query.code else {
+        return Redirect::to(&state.index_path).into_response();
+    };
+
+    let authorized = state.oidc.authorize(code).await;
 
     let authorized = match authorized {
         Ok(authorized) => authorized,
@@ -41,5 +45,5 @@ pub async fn handle_callback(
         return err.into_response();
     }
 
-    Redirect::to("/").into_response()
+    Redirect::to(&state.index_path).into_response()
 }

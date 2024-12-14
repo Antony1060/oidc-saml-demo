@@ -22,32 +22,65 @@ async fn main() -> anyhow::Result<()> {
 
     let env = init_env()?;
 
-    let state = Arc::new(AppState {
-        oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
-        environment: env,
-    });
-
+    // setup sessions
     let session_layer =
         SessionManagerLayer::new(MemoryStore::default()).with_same_site(SameSite::Lax);
 
+    // setup index route, redirect URIs could use the same route
+    //  callback and logout handler will redirect to correct index
+    let index_route = ["/", "/home", "/main"]
+        .into_iter()
+        .find(|path| {
+            let oidc_config = &env.oidc_config;
+
+            let redirect_uris: [&str; 2] = [
+                &oidc_config.redirect_uri.path.to_ascii_lowercase(),
+                &oidc_config.logout_redirect_uri.path.to_ascii_lowercase(),
+            ];
+
+            !redirect_uris.contains(path)
+        })
+        .expect("index route should be present");
+
+    // setup state
+    let state = Arc::new(AppState {
+        oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
+        environment: env,
+        index_path: index_route.to_string(),
+    });
+
+    let oidc_config = &state.environment.oidc_config;
+
+    // setup router
     let app = Router::new()
-        .route("/", get(routes::oidc::index::handle_index))
-        .nest(
-            "/oidc",
-            Router::new()
-                .route("/login", get(routes::oidc::login::handle_login))
-                .route("/callback", get(routes::oidc::callback::handle_callback))
-                .route("/logout", get(routes::oidc::logout::handle_logout)),
+        .route(index_route, get(routes::index::handle_index))
+        // OIDC callback and logout paths are applied from the environment
+        .route(
+            &oidc_config.redirect_uri.path,
+            get(routes::oidc::callback::handle_callback),
         )
+        .route(
+            &oidc_config.logout_redirect_uri.path,
+            get(routes::oidc::logout::oidc_logout),
+        )
+        .route("/oidc/login", get(routes::oidc::login::oidc_login))
+        .fallback(routes::four_oh_four::handle_404)
         .layer(session_layer)
         .with_state(state.clone());
 
     let listener =
         tokio::net::TcpListener::bind(format!("0.0.0.0:{}", &state.environment.port)).await?;
 
+    info!("Using OIDC scopes: {}", oidc_config.scopes.join(" "));
+
+    info!("Index listening on: {}", index_route);
     info!(
-        "Using OIDC scopes: {}",
-        state.environment.oidc_config.scopes.join(" ")
+        "OIDC callback listening on: {}",
+        oidc_config.redirect_uri.path
+    );
+    info!(
+        "OIDC logout callback listening on URI: {}",
+        oidc_config.logout_redirect_uri.path
     );
 
     info!("Server started on {}", state.environment.port);
