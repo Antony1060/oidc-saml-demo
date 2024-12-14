@@ -3,8 +3,7 @@ use crate::sso::oidc::{OidcAuthorization, OidcProvider};
 use crate::state::AppState;
 use crate::templates::{LoggedInTemplate, LoginTemplate};
 use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Redirect};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,8 +21,12 @@ pub async fn handle_index(
         LoginSessionData::None => return LoginTemplate.into_response(),
         LoginSessionData::OIDC(oidc) => match get_oidc_data(&state.oidc, &oidc).await {
             Ok(userinfo) => userinfo,
-            Err(err) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
+            Err(_) => {
+                // if we can't get userinfo, redirect to our logout handler
+                //  we assume that at this point the session ended on the provider side
+                //  so we can just clear our session
+                return Redirect::to(&state.environment.oidc_config.logout_redirect_uri.path)
+                    .into_response();
             }
         },
     };
