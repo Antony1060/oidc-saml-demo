@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 struct ProviderData {
-    userinfo: HashMap<String, String>,
+    // key -> (type, value)
+    //  type can be "string" or "json", this is only used for the UI
+    userinfo: HashMap<String, (String, String)>,
     logout_url: String,
 }
 
@@ -31,14 +33,14 @@ pub async fn handle_index(
         },
     };
 
-    let userinfo = &provider_data.userinfo;
+    let userinfo = provider_data.userinfo;
 
     let username = 'username: {
-        if let Some(username) = userinfo.get("cn") {
+        if let Some((_, username)) = userinfo.get("cn") {
             break 'username username.to_string();
         }
 
-        if let Some(username) = userinfo.get("name") {
+        if let Some((_, username)) = userinfo.get("name") {
             break 'username username.to_string();
         }
 
@@ -48,11 +50,16 @@ pub async fn handle_index(
     LoggedInTemplate {
         username,
         login_method: LoginMethod::OIDC,
-        scope_values: userinfo
-            .iter()
-            .filter(|(k, _)| *k != "sub")
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect(),
+        scope_values: {
+            let mut vec = userinfo
+                .into_iter()
+                .filter(|(k, _)| *k != "sub")
+                .collect::<Vec<_>>();
+
+            vec.sort_by_key(|(key, _)| key.to_string());
+
+            vec
+        },
         logout_url: provider_data.logout_url,
     }
     .into_response()
@@ -70,19 +77,22 @@ async fn get_oidc_data(
             (
                 key,
                 match value {
-                    Value::String(value) => value,
+                    Value::String(value) => ("string".to_string(), value),
                     // if result is an array of exactly one string value, treat it as a string in the UI
                     Value::Array(values)
                         if values.len() == 1 && matches!(&values[0], Value::String(_)) =>
                     {
-                        values[0].as_str().unwrap().to_string()
+                        (
+                            "string".to_string(),
+                            values[0].as_str().unwrap().to_string(),
+                        )
                     }
-                    _ => value.to_string(),
+                    _ => ("json".to_string(), value.to_string()),
                 },
             )
         })
         .filter(|(key, _)| key != "sub")
-        .collect::<HashMap<String, String>>();
+        .collect::<HashMap<String, (String, String)>>();
 
     Ok(ProviderData {
         userinfo,

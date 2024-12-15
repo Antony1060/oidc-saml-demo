@@ -25,15 +25,37 @@
 </head>
 <body>
 <div class="w-full h-screen flex items-center justify-center p-4">
-    <div class="flex flex-col gap-2 items-center p-8 bg-neutral-800 rounded">
-        <span class="w-full text-left">Logged in as <b>{{ username }}</b> ({{ login_method }})</span>
-        <div class="w-full flex flex-col items-start">
-            {% for (key, value) in scope_values %}
-            <span><b>{{ key }}</b>: {{ value }}</span>
-            {% endfor %}
+    <div class="flex flex-col gap-4 items-center p-4 bg-neutral-800 rounded w-[400px]">
+        <div class="w-full bg-neutral-900 rounded px-4 py-2 flex flex-col gap-1">
+            <div class="flex gap-2 items-center justify-between text-neutral-300 text-sm">
+                <span>Logged in as:</span>
+                <span>{{ login_method }}</span>
+            </div>
+            <span class="font-bold text-neutral-200">{{ username }}</span>
+        </div>
+        <div class="h-[1px] bg-neutral-700 rounded" style="width: calc(100% + 1rem);"></div>
+        <div class="w-full flex flex-col gap-2">
+            <span class="ml-1 text-lg">User info:</span>
+            <div class="w-full flex flex-col gap-2">
+                {% for (key, (type, value)) in scope_values %}
+                <div class="w-full bg-neutral-900 rounded px-4 py-2 flex flex-col">
+                    <div class="flex gap-2 items-center justify-between text-neutral-300 text-sm">
+                        <span>{{ key }}</span>
+                        {% if type == "string" %}
+                        <span class="text-green-500">String</span>
+                        {% else %}
+                        <span class="text-blue-500">JSON</span>
+                        {% endif %}
+                    </div>
+                    <span class="text-neutral-200">{{ value }}</span>
+                </div>
+                {% endfor %}
+            </div>
         </div>
         <a href="{{ logout_url }}"
-           class="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full text-center">Logout</a>
+           class="outline-none px-3 py-1 bg-neutral-200 hover:bg-neutral-300 focus:bg-neutral-400 transition-colors text-black rounded w-full text-center w-max">
+            Logout
+        </a>
     </div>
 </div>
 </body>

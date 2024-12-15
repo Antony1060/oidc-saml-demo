@@ -11,6 +11,6 @@ pub struct LoginTemplate;
 pub struct LoggedInTemplate {
     pub username: String,
     pub login_method: LoginMethod,
-    pub scope_values: Vec<(String, String)>,
+    pub scope_values: Vec<(String, (String, String))>,
     pub logout_url: String,
 }
