@@ -9,9 +9,15 @@ jobs:
   release:
     name: "🛠️ Build"
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
-      - name: "Code Checkout"
+      - name: Code Checkout
         uses: actions/checkout@v4
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.7
 
       - name: Build release binary
         run: cargo build --release
