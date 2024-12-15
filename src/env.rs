@@ -71,7 +71,7 @@ fn init_oidc_config() -> Result<OidcConfig, EnvError> {
                 break 'oidc DEFAULT_SCOPES.iter().map(|&it| it.to_string()).collect();
             };
 
-            let mut scopes: Vec<String> = scopes.split(' ').map(|s| s.to_string()).collect();
+            let mut scopes: Vec<String> = scopes.split(',').map(|s| s.to_string()).collect();
 
             for scope in DEFAULT_SCOPES {
                 if !scope.contains(scope) {
