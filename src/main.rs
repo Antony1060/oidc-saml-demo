@@ -85,7 +85,17 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Server started on {}", state.environment.port);
 
-    axum::serve::serve(listener, app).await?;
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
+    tokio::select! {
+        _ = axum::serve::serve(listener, app) => {},
+        _ = tokio::signal::ctrl_c() => {
+            info!("Shutting down");
+        },
+        _ = sigterm.recv() => {
+            info!("Shutting down");
+        }
+    }
 
     Ok(())
 }
