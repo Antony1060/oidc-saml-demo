@@ -1,9 +1,11 @@
 use crate::env::init_env;
 use crate::state::AppState;
 use crate::tracing::setup_tracing;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
+use samael::metadata::EntityDescriptor;
 use std::sync::Arc;
+use tower_http::cors::CorsLayer;
 use tower_sessions::cookie::SameSite;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
 use ::tracing::info;
@@ -42,11 +44,33 @@ async fn main() -> anyhow::Result<()> {
         })
         .expect("index route should be present");
 
+    let idp_meta: EntityDescriptor = samael::metadata::de::from_str(
+        &reqwest::get(
+            "https://keycloak.rhel.local.antony.cloud/realms/master/protocol/saml/descriptor",
+        )
+        .await?
+        .text()
+        .await?,
+    )?;
+
+    let saml_sp = samael::service_provider::ServiceProviderBuilder::default()
+        .entity_id("saml-demo".to_string())
+        .allow_idp_initiated(false)
+        .idp_metadata(idp_meta)
+        .acs_url("http://localhost:3000/saml/acs".to_string())
+        .slo_url("http://localhost:3000/saml/slo".to_string())
+        .build()?;
+
+    // let a = saml.metadata().unwrap().to_string().unwrap();
+    //
+    // println!("{}", a);
+
     // setup state
     let state = Arc::new(AppState {
         oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
         environment: env,
         index_path: index_route.to_string(),
+        saml_sp,
     });
 
     let oidc_config = &state.environment.oidc_config;
@@ -64,7 +88,14 @@ async fn main() -> anyhow::Result<()> {
             get(routes::oidc::logout::oidc_logout),
         )
         .route("/oidc/login", get(routes::oidc::login::oidc_login))
+        .nest(
+            "/saml",
+            Router::new()
+                .route("/login", get(routes::saml::login::saml_login))
+                .route("/acs", post(routes::saml::acs::saml_acs)),
+        )
         .fallback(routes::four_oh_four::handle_404)
+        .layer(CorsLayer::very_permissive())
         .layer(session_layer)
         .with_state(state.clone());
 

@@ -1,4 +1,5 @@
 use crate::sso::oidc::OidcAuthorization;
+use crate::sso::saml::SamlState;
 use axum::async_trait;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -11,7 +12,7 @@ use tower_sessions::Session;
 #[derive(Debug, Serialize)]
 pub enum LoginMethod {
     OIDC,
-    _SAML,
+    SAML,
 }
 
 impl Display for LoginMethod {
@@ -21,7 +22,7 @@ impl Display for LoginMethod {
             "{}",
             match self {
                 LoginMethod::OIDC => "OpenID Connect",
-                LoginMethod::_SAML => "Security Assertion Markup Language",
+                LoginMethod::SAML => "Security Assertion Markup Language",
             }
         )
     }
@@ -33,6 +34,7 @@ pub enum LoginSessionData {
     #[default]
     None,
     OIDC(OidcAuthorization),
+    SAML(SamlState),
 }
 
 pub struct LoginSession {

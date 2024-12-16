@@ -1,5 +1,6 @@
 use crate::models::{LoginMethod, LoginSession, LoginSessionData};
 use crate::sso::oidc::{OidcAuthorization, OidcProvider};
+use crate::sso::saml::SamlState;
 use crate::state::AppState;
 use crate::templates::{LoggedInTemplate, LoginTemplate};
 use axum::extract::State;
@@ -11,6 +12,7 @@ use std::sync::Arc;
 struct ProviderData {
     // key -> (type, value)
     //  type can be "string" or "json", this is only used for the UI
+    login_method: LoginMethod,
     userinfo: HashMap<String, (String, String)>,
     logout_url: String,
 }
@@ -20,7 +22,9 @@ pub async fn handle_index(
     session: LoginSession,
 ) -> impl IntoResponse {
     let provider_data = match session.data {
-        LoginSessionData::None => return LoginTemplate.into_response(),
+        LoginSessionData::None | LoginSessionData::SAML(SamlState::Pending { .. }) => {
+            return LoginTemplate.into_response()
+        }
         LoginSessionData::OIDC(oidc) => match get_oidc_data(&state.oidc, &oidc).await {
             Ok(userinfo) => userinfo,
             Err(_) => {
@@ -30,6 +34,20 @@ pub async fn handle_index(
                 return Redirect::to(&state.environment.oidc_config.logout_redirect_uri.path)
                     .into_response();
             }
+        },
+        LoginSessionData::SAML(SamlState::LoggedIn) => ProviderData {
+            login_method: LoginMethod::SAML,
+            userinfo: HashMap::from([
+                (
+                    "name".to_string(),
+                    ("string".to_string(), "Antonio Fran Trstenjak".to_string()),
+                ),
+                (
+                    "given name".to_string(),
+                    ("json".to_string(), "Antonio Fran".to_string()),
+                ),
+            ]),
+            logout_url: "".to_string(),
         },
     };
 
@@ -49,7 +67,7 @@ pub async fn handle_index(
 
     LoggedInTemplate {
         username,
-        login_method: LoginMethod::OIDC,
+        login_method: provider_data.login_method,
         scope_values: {
             let mut vec = userinfo
                 .into_iter()
@@ -95,6 +113,7 @@ async fn get_oidc_data(
         .collect::<HashMap<String, (String, String)>>();
 
     Ok(ProviderData {
+        login_method: LoginMethod::OIDC,
         userinfo,
         logout_url: oidc.logout_url(&oidc_authorization.id_token),
     })
