@@ -1,0 +1,6 @@
+- parse nameid from saml
+- parse attributes from saml
+- correct data in index
+- logout
+- saml to environment variables
+- clean up codebase

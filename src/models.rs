@@ -22,7 +22,7 @@ impl Display for LoginMethod {
             "{}",
             match self {
                 LoginMethod::OIDC => "OpenID Connect",
-                LoginMethod::SAML => "Security Assertion Markup Language",
+                LoginMethod::SAML => "SAML",
             }
         )
     }

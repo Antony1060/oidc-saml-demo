@@ -5,7 +5,6 @@ use axum::routing::{get, post};
 use axum::Router;
 use samael::metadata::EntityDescriptor;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
 use tower_sessions::cookie::SameSite;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
 use ::tracing::info;
@@ -25,8 +24,13 @@ async fn main() -> anyhow::Result<()> {
     let env = init_env()?;
 
     // setup sessions
-    let session_layer =
-        SessionManagerLayer::new(MemoryStore::default()).with_same_site(SameSite::Lax);
+    let session_layer = SessionManagerLayer::new(MemoryStore::default())
+        // SAML will return the assertion to this path and the cookie won't be passed along
+        //  if this is Lax or Strict
+        // there might be a better way of handling this, but I guess it's fine for now,
+        //  any help would be greatly appreciated
+        .with_same_site(SameSite::None)
+        .with_secure(true);
 
     // setup index route, redirect URIs could use the same route
     //  callback and logout handler will redirect to correct index
@@ -61,10 +65,6 @@ async fn main() -> anyhow::Result<()> {
         .slo_url("http://localhost:3000/saml/slo".to_string())
         .build()?;
 
-    // let a = saml.metadata().unwrap().to_string().unwrap();
-    //
-    // println!("{}", a);
-
     // setup state
     let state = Arc::new(AppState {
         oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
@@ -95,7 +95,6 @@ async fn main() -> anyhow::Result<()> {
                 .route("/acs", post(routes::saml::acs::saml_acs)),
         )
         .fallback(routes::four_oh_four::handle_404)
-        .layer(CorsLayer::very_permissive())
         .layer(session_layer)
         .with_state(state.clone());
 

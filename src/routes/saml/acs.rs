@@ -21,7 +21,6 @@ pub async fn saml_acs(
     let LoginSessionData::SAML(SamlState::Pending { request_id }) = session.data else {
         return Redirect::to(&state.index_path).into_response();
     };
-    dbg!(&request_id);
 
     let res = state
         .saml_sp
