@@ -19,6 +19,11 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.7
 
+      - name: Install xmlsec1 (dep)
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install xmlsec1
+
       - name: Build release binary
         run: cargo build --release
 

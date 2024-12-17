@@ -2,7 +2,7 @@ FROM debian:bookworm
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install openssl ca-certificates -y
+RUN apt-get update && apt-get install openssl ca-certificates xmlsec1 -y
 
 COPY ./target/release/oidc-saml-demo oidc-saml-demo
 
