@@ -35,6 +35,7 @@ pub async fn handle_index(
                     .into_response();
             }
         },
+        // TODO: parse SAML nameid and attributes
         LoginSessionData::SAML(SamlState::LoggedIn) => ProviderData {
             login_method: LoginMethod::SAML,
             userinfo: HashMap::from([
@@ -47,7 +48,7 @@ pub async fn handle_index(
                     ("json".to_string(), "Antonio Fran".to_string()),
                 ),
             ]),
-            logout_url: "".to_string(),
+            logout_url: "/saml/slo".to_string(),
         },
     };
 

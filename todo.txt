@@ -1,6 +1,6 @@
-- parse nameid from saml
-- parse attributes from saml
+- parse nameid and attributes from saml
 - correct data in index
 - logout
 - saml to environment variables
 - clean up codebase
+- some random xml error on prod

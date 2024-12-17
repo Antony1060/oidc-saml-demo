@@ -92,7 +92,8 @@ async fn main() -> anyhow::Result<()> {
             "/saml",
             Router::new()
                 .route("/login", get(routes::saml::login::saml_login))
-                .route("/acs", post(routes::saml::acs::saml_acs)),
+                .route("/acs", post(routes::saml::acs::saml_acs))
+                .route("/slo", get(routes::saml::slo::saml_slo)),
         )
         .fallback(routes::four_oh_four::handle_404)
         .layer(session_layer)
