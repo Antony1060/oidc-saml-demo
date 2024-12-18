@@ -68,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
     //  IDP might still include it's signing keys in the metadata
     //  and the samael library will try to automatically validate the signatures
     //  if keys are present in the metadata
+    // either way, signatures should really never be disabled
     if !env.saml_config.verify_signatures {
         saml_sp.idp_metadata.idp_sso_descriptors =
             saml_sp.idp_metadata.idp_sso_descriptors.map(|descriptors| {
