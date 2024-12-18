@@ -1355,6 +1355,7 @@ dependencies = [
  "jsonwebtoken",
  "jwks",
  "multimap",
+ "openssl",
  "reqwest 0.12.9",
  "samael",
  "serde",

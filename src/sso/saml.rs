@@ -3,6 +3,7 @@ use crate::models::UserAttribute;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use multimap::MultiMap;
+use openssl::pkey::PKey;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::{Assertion, Subject, SubjectNameID};
@@ -37,10 +38,23 @@ pub enum SamlSetupError {
 
     #[error("Failed to build SAML service provider: {0}")]
     ServiceProviderError(#[from] samael::service_provider::ServiceProviderBuilderError),
+
+    #[error("Failed to read private key: {0}")]
+    IOError(#[from] std::io::Error),
+
+    #[error("Failed to parse private key: {0}")]
+    OpensslError(#[from] openssl::error::ErrorStack),
+}
+
+#[derive(Debug, Clone)]
+pub enum SamlPrivateKeyType {
+    Rsa,
+    Ecdsa,
 }
 
 pub struct SamlServiceProvider {
     sp: ServiceProvider,
+    private_key: PKey<openssl::pkey::Private>,
 }
 
 #[derive(Error, Debug)]
@@ -84,6 +98,18 @@ impl SamlServiceProvider {
             }
         })?;
 
+        let private_key_bytes = std::fs::read(&config.private_key)?;
+
+        let private_key = match config.private_key_type {
+            SamlPrivateKeyType::Rsa => {
+                PKey::from_rsa(openssl::rsa::Rsa::private_key_from_pem(&private_key_bytes)?)?
+            }
+            // TODO: untested
+            SamlPrivateKeyType::Ecdsa => PKey::from_ec_key(
+                openssl::ec::EcKey::private_key_from_pem(&private_key_bytes)?,
+            )?,
+        };
+
         let sp = samael::service_provider::ServiceProviderBuilder::default()
             .entity_id(config.entity_id.clone())
             .allow_idp_initiated(false)
@@ -92,7 +118,7 @@ impl SamlServiceProvider {
             .slo_url(config.slo_url.full_url.clone())
             .build()?;
 
-        Ok(Self { sp })
+        Ok(Self { sp, private_key })
     }
 
     fn remove_signing_descriptors(mut metadata: EntityDescriptor) -> EntityDescriptor {
@@ -125,7 +151,9 @@ impl SamlServiceProvider {
                 })?,
         )?;
 
-        let url = authn_request.redirect("")?.unwrap();
+        let url = authn_request
+            .signed_redirect("", self.private_key.clone())?
+            .unwrap();
 
         Ok(SamlAuthenticationRequest {
             id: authn_request.id.clone(),
@@ -182,7 +210,7 @@ impl SamlServiceProvider {
                 attribute_statement
                     .attributes
                     .into_iter()
-                    .filter_map(|attribute| Self::parse_attribute(attribute))
+                    .filter_map(Self::parse_attribute)
             })
             .collect();
 

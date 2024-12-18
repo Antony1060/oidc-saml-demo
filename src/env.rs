@@ -1,3 +1,4 @@
+use crate::sso::saml::SamlPrivateKeyType;
 use thiserror::Error;
 use tracing::warn;
 use url::Url;
@@ -27,6 +28,8 @@ pub struct SamlConfig {
     pub acs_url: BaseUrlParts,
     pub slo_url: BaseUrlParts,
     pub verify_signatures: bool,
+    pub private_key: String,
+    pub private_key_type: SamlPrivateKeyType,
 }
 
 #[derive(Debug)]
@@ -105,6 +108,14 @@ fn init_saml_config() -> Result<SamlConfig, EnvError> {
         verify_signatures: get_env("SAML_SP_VERIFY_SIGNATURES")?
             .parse()
             .map_err(|_| EnvError::VarError("SAML_SP_VERIFY_SIGNATURES"))?,
+        private_key: get_env("SAML_SP_PRIVATE_KEY_LOCATION")?,
+        private_key_type: get_env("SAML_SP_PRIVATE_KEY_TYPE").map(|val| {
+            match val.to_ascii_lowercase().as_str() {
+                "rsa" => Ok(SamlPrivateKeyType::Rsa),
+                "ecdsa" => Ok(SamlPrivateKeyType::Ecdsa),
+                _ => Err(EnvError::VarError("SAML_SP_PRIVATE_KEY_TYPE")),
+            }
+        })??,
     })
 }
 
