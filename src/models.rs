@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter};
 use tower_sessions::Session;
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 pub enum LoginMethod {
     OIDC,
     SAML,
@@ -26,6 +26,13 @@ impl Display for LoginMethod {
             }
         )
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UserAttribute {
+    // used only in UI
+    pub attribute_type: String,
+    pub value: String,
 }
 
 #[allow(clippy::upper_case_acronyms)]

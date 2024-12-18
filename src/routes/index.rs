@@ -1,4 +1,4 @@
-use crate::models::{LoginMethod, LoginSession, LoginSessionData};
+use crate::models::{LoginMethod, LoginSession, LoginSessionData, UserAttribute};
 use crate::sso::oidc::{OidcAuthorization, OidcProvider};
 use crate::sso::saml::SamlState;
 use crate::state::AppState;
@@ -10,10 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 struct ProviderData {
-    // key -> (type, value)
-    //  type can be "string" or "json", this is only used for the UI
     login_method: LoginMethod,
-    userinfo: HashMap<String, (String, String)>,
+    userinfo: HashMap<String, UserAttribute>,
     logout_url: String,
 }
 
@@ -37,11 +35,7 @@ pub async fn handle_index(
         },
         LoginSessionData::SAML(SamlState::LoggedIn(saml)) => ProviderData {
             login_method: LoginMethod::SAML,
-            userinfo: saml
-                .attributes
-                .into_iter()
-                .map(|(key, value)| (key, ("string".to_string(), value)))
-                .collect(),
+            userinfo: saml.attributes,
             logout_url: saml.logout_url.clone(),
         },
     };
@@ -49,11 +43,17 @@ pub async fn handle_index(
     let userinfo = provider_data.userinfo;
 
     let username = 'username: {
-        if let Some((_, username)) = userinfo.get("cn") {
+        if let Some(UserAttribute {
+            value: username, ..
+        }) = userinfo.get("cn")
+        {
             break 'username username.to_string();
         }
 
-        if let Some((_, username)) = userinfo.get("name") {
+        if let Some(UserAttribute {
+            value: username, ..
+        }) = userinfo.get("name")
+        {
             break 'username username.to_string();
         }
 
@@ -90,22 +90,28 @@ async fn get_oidc_data(
             (
                 key,
                 match value {
-                    Value::String(value) => ("string".to_string(), value),
+                    Value::String(value) => UserAttribute {
+                        attribute_type: "String".to_string(),
+                        value,
+                    },
                     // if result is an array of exactly one string value, treat it as a string in the UI
                     Value::Array(values)
                         if values.len() == 1 && matches!(&values[0], Value::String(_)) =>
                     {
-                        (
-                            "string".to_string(),
-                            values[0].as_str().unwrap().to_string(),
-                        )
+                        UserAttribute {
+                            attribute_type: "String".to_string(),
+                            value: values[0].as_str().unwrap().to_string(),
+                        }
                     }
-                    _ => ("json".to_string(), value.to_string()),
+                    _ => UserAttribute {
+                        attribute_type: "JSON".to_string(),
+                        value: value.to_string(),
+                    },
                 },
             )
         })
         .filter(|(key, _)| key != "sub")
-        .collect::<HashMap<String, (String, String)>>();
+        .collect::<HashMap<String, UserAttribute>>();
 
     Ok(ProviderData {
         login_method: LoginMethod::OIDC,

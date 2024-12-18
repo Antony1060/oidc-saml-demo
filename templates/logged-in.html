@@ -35,19 +35,26 @@
         </div>
         <div class="h-[1px] bg-neutral-700 rounded" style="width: calc(100% + 1rem);"></div>
         <div class="w-full flex flex-col gap-2">
-            <span class="ml-1 text-lg">User info:</span>
+            <span class="ml-1 text-lg">
+                {% if login_method == LoginMethod::SAML %}
+                    Attributes:
+                {% else %}
+                    User info:
+                {% endif %}
+            </span>
             <div class="w-full flex flex-col gap-2">
-                {% for (key, (type, value)) in scope_values %}
+                {% for (key, attr) in scope_values %}
                 <div class="w-full bg-neutral-900 rounded px-4 py-2 flex flex-col">
                     <div class="flex gap-2 items-center justify-between text-neutral-300 text-sm">
                         <span>{{ key }}</span>
-                        {% if type == "string" %}
-                        <span class="text-green-500">String</span>
+                        {% if attr.attribute_type.to_ascii_lowercase() == "string" ||
+                        attr.attribute_type.to_ascii_lowercase() == "xs:string" %}
+                        <span class="text-green-500">{{ attr.attribute_type }}</span>
                         {% else %}
-                        <span class="text-blue-500">JSON</span>
+                        <span class="text-blue-500">{{ attr.attribute_type }}</span>
                         {% endif %}
                     </div>
-                    <span class="text-neutral-200">{{ value }}</span>
+                    <span class="text-neutral-200">{{ attr.value }}</span>
                 </div>
                 {% endfor %}
             </div>

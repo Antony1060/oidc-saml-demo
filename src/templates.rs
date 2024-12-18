@@ -1,4 +1,4 @@
-use crate::models::LoginMethod;
+use crate::models::{LoginMethod, UserAttribute};
 use askama::Template;
 use serde::Serialize;
 
@@ -11,6 +11,6 @@ pub struct LoginTemplate;
 pub struct LoggedInTemplate {
     pub username: String,
     pub login_method: LoginMethod,
-    pub scope_values: Vec<(String, (String, String))>,
+    pub scope_values: Vec<(String, UserAttribute)>,
     pub logout_url: String,
 }

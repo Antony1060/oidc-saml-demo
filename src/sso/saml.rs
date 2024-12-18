@@ -1,6 +1,8 @@
 use crate::env::SamlConfig;
+use crate::models::UserAttribute;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::{Assertion, Subject, SubjectNameID};
 use samael::service_provider::ServiceProvider;
@@ -12,7 +14,7 @@ use url::Url;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SamlAuthorization {
-    pub attributes: HashMap<String, String>,
+    pub attributes: HashMap<String, UserAttribute>,
     // TODO: improve with logout request
     pub logout_url: String,
 }
@@ -142,7 +144,7 @@ impl SamlServiceProvider {
             .sp
             .parse_xml_response(decoded, Some(&[in_response_to]))?;
 
-        let attributes = self.parse_authentication_response_attributes(assertion)?;
+        let attributes = Self::parse_authentication_response_attributes(assertion)?;
 
         Ok(SamlAuthorization {
             attributes,
@@ -151,9 +153,8 @@ impl SamlServiceProvider {
     }
 
     fn parse_authentication_response_attributes(
-        &self,
         assertion: Assertion,
-    ) -> Result<HashMap<String, String>, SamlError> {
+    ) -> Result<HashMap<String, UserAttribute>, SamlError> {
         let Some(Subject {
             name_id:
                 Some(SubjectNameID {
@@ -174,27 +175,52 @@ impl SamlServiceProvider {
             ));
         };
 
-        let mut attributes: HashMap<String, String> = attribute_statements
+        let mut attributes: HashMap<String, UserAttribute> = attribute_statements
             .into_iter()
             .flat_map(|attribute_statement| {
                 attribute_statement
                     .attributes
                     .into_iter()
                     .filter_map(|attribute| {
-                        Some((
-                            attribute.friendly_name?,
-                            attribute
-                                .values
-                                .into_iter()
-                                .filter_map(|value| value.value)
-                                .reduce(|acc, value| format!("{}, {}", acc, value))?,
-                        ))
+                        dbg!(&attribute);
+                        Self::parse_attribute(attribute)
                     })
             })
             .collect();
 
-        attributes.insert("name".to_string(), subject_name);
+        dbg!(&attributes);
+
+        attributes.insert(
+            "name".to_string(),
+            UserAttribute {
+                attribute_type: "xs:string".to_string(),
+                value: subject_name,
+            },
+        );
 
         Ok(attributes)
+    }
+
+    fn parse_attribute(attribute: Attribute) -> Option<(String, UserAttribute)> {
+        Some((
+            attribute.friendly_name.or(attribute.name)?,
+            attribute
+                .values
+                .into_iter()
+                .filter_map(|value| {
+                    Some(UserAttribute {
+                        value: value.value?,
+                        attribute_type: value.attribute_type.unwrap_or("String".to_string()),
+                    })
+                })
+                // potential loss of type info
+                //  we hope that type is the same for attribute with same name
+                .reduce(|mut acc, curr| {
+                    acc.value.push_str(", ");
+                    acc.value.push_str(&curr.value);
+
+                    acc
+                })?,
+        ))
     }
 }
