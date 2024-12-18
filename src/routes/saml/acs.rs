@@ -22,9 +22,9 @@ pub async fn saml_acs(
         return Redirect::to(&state.index_path).into_response();
     };
 
-    let res = state
-        .saml_sp
-        .parse_base64_response(&SAMLResponse, Some(&[&request_id]))
+    let authorization = state
+        .saml
+        .process_authentication_response(&SAMLResponse, &request_id)
         .map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -32,25 +32,28 @@ pub async fn saml_acs(
             )
         });
 
-    if let Err(err) = res {
-        let res = LoginSession::update_session(&session.session, &LoginSessionData::None).await;
+    match authorization {
+        Ok(authorization) => {
+            let res = LoginSession::update_session(
+                &session.session,
+                &LoginSessionData::SAML(SamlState::LoggedIn(authorization)),
+            )
+            .await;
 
-        if let Err(err) = res {
-            return err.into_response();
+            if let Err(err) = res {
+                return err.into_response();
+            }
+
+            Redirect::to(&state.index_path).into_response()
         }
+        Err(err) => {
+            let res = LoginSession::update_session(&session.session, &LoginSessionData::None).await;
 
-        return err.into_response();
+            if let Err(err) = res {
+                return err.into_response();
+            }
+
+            err.into_response()
+        }
     }
-
-    let res = LoginSession::update_session(
-        &session.session,
-        &LoginSessionData::SAML(SamlState::LoggedIn),
-    )
-    .await;
-
-    if let Err(err) = res {
-        return err.into_response();
-    }
-
-    Redirect::to(&state.index_path).into_response()
 }

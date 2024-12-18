@@ -3,7 +3,6 @@ use crate::state::AppState;
 use crate::tracing::setup_tracing;
 use axum::routing::{get, post};
 use axum::Router;
-use samael::metadata::EntityDescriptor;
 use std::sync::Arc;
 use tower_sessions::cookie::SameSite;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
@@ -32,71 +31,33 @@ async fn main() -> anyhow::Result<()> {
         .with_same_site(SameSite::None)
         .with_secure(true);
 
+    let oidc_config = &env.oidc_config;
+    let saml_config = &env.saml_config;
+
+    let sensitive_paths: [&str; 4] = [
+        &oidc_config.redirect_uri.path.to_ascii_lowercase(),
+        &oidc_config.logout_redirect_uri.path.to_ascii_lowercase(),
+        &saml_config.acs_url.path.to_ascii_lowercase(),
+        &saml_config.slo_url.path.to_ascii_lowercase(),
+    ];
+
     // setup index route, redirect URIs could use the same route
     //  callback and logout handler will redirect to correct index
-    let index_route = ["/", "/home", "/main"]
+    let index_route = ["/", "/home", "/main", "/index", "/root"]
         .into_iter()
-        .find(|path| {
-            let oidc_config = &env.oidc_config;
-
-            let redirect_uris: [&str; 2] = [
-                &oidc_config.redirect_uri.path.to_ascii_lowercase(),
-                &oidc_config.logout_redirect_uri.path.to_ascii_lowercase(),
-            ];
-
-            !redirect_uris.contains(path)
-        })
+        .find(|path| !sensitive_paths.contains(path))
         .expect("index route should be present");
-
-    let idp_meta: EntityDescriptor = samael::metadata::de::from_str(
-        &reqwest::get(&env.saml_config.idp_metadata_url)
-            .await?
-            .text()
-            .await?,
-    )?;
-
-    let mut saml_sp = samael::service_provider::ServiceProviderBuilder::default()
-        .entity_id(env.saml_config.entity_id.to_string())
-        .allow_idp_initiated(false)
-        .idp_metadata(idp_meta)
-        .acs_url(env.saml_config.acs_url.to_string())
-        .slo_url(env.saml_config.slo_url.to_string())
-        .build()?;
-
-    // a very weird way of removing signing certificates from the IDP metadata
-    //  if the SAML client is configured to not sign responses on IDP side,
-    //  IDP might still include it's signing keys in the metadata
-    //  and the samael library will try to automatically validate the signatures
-    //  if keys are present in the metadata
-    // either way, signatures should really never be disabled
-    if !env.saml_config.verify_signatures {
-        saml_sp.idp_metadata.idp_sso_descriptors =
-            saml_sp.idp_metadata.idp_sso_descriptors.map(|descriptors| {
-                descriptors
-                    .into_iter()
-                    .map(|mut descriptor| {
-                        descriptor.key_descriptors.retain(|key_descriptor| {
-                            key_descriptor
-                                .key_use
-                                .as_ref()
-                                .map(|key_use| key_use != "signing")
-                                .unwrap_or(true)
-                        });
-                        descriptor
-                    })
-                    .collect()
-            })
-    }
 
     // setup state
     let state = Arc::new(AppState {
         oidc: sso::oidc::OidcProvider::new(&env.oidc_config).await?,
+        saml: sso::saml::SamlServiceProvider::new(&env.saml_config).await?,
         environment: env,
         index_path: index_route.to_string(),
-        saml_sp,
     });
 
     let oidc_config = &state.environment.oidc_config;
+    let saml_config = &state.environment.saml_config;
 
     // setup router
     let app = Router::new()
@@ -136,6 +97,8 @@ async fn main() -> anyhow::Result<()> {
         "OIDC logout callback listening on URI: {}",
         oidc_config.logout_redirect_uri.path
     );
+    info!("SAML ACS listening on: {}", saml_config.acs_url.path);
+    info!("SAML SLO listening on URI: {}", saml_config.slo_url.path);
 
     info!("Server started on {}", state.environment.port);
 

@@ -35,20 +35,14 @@ pub async fn handle_index(
                     .into_response();
             }
         },
-        // TODO: parse SAML nameid and attributes
-        LoginSessionData::SAML(SamlState::LoggedIn) => ProviderData {
+        LoginSessionData::SAML(SamlState::LoggedIn(saml)) => ProviderData {
             login_method: LoginMethod::SAML,
-            userinfo: HashMap::from([
-                (
-                    "name".to_string(),
-                    ("string".to_string(), "Antonio Fran Trstenjak".to_string()),
-                ),
-                (
-                    "given name".to_string(),
-                    ("json".to_string(), "Antonio Fran".to_string()),
-                ),
-            ]),
-            logout_url: "/saml/slo".to_string(),
+            userinfo: saml
+                .attributes
+                .into_iter()
+                .map(|(key, value)| (key, ("string".to_string(), value)))
+                .collect(),
+            logout_url: saml.logout_url.clone(),
         },
     };
 

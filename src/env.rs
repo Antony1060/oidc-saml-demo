@@ -24,8 +24,8 @@ pub struct OidcConfig {
 pub struct SamlConfig {
     pub idp_metadata_url: String,
     pub entity_id: String,
-    pub acs_url: String,
-    pub slo_url: String,
+    pub acs_url: BaseUrlParts,
+    pub slo_url: BaseUrlParts,
     pub verify_signatures: bool,
 }
 
@@ -98,8 +98,10 @@ fn init_saml_config() -> Result<SamlConfig, EnvError> {
     Ok(SamlConfig {
         idp_metadata_url: get_env("SAML_IDP_METADATA_URL")?,
         entity_id: get_env("SAML_SP_ENTITY_ID")?,
-        acs_url: get_env("SAML_SP_ACS_URL")?,
-        slo_url: get_env("SAML_SP_SLO_URL")?,
+        acs_url: get_env("SAML_SP_ACS_URL")
+            .and_then(|val| parse_url_parts("SAML_SP_ACS_URL", &val))?,
+        slo_url: get_env("SAML_SP_SLO_URL")
+            .and_then(|val| parse_url_parts("SAML_SP_SLO_URL", &val))?,
         verify_signatures: get_env("SAML_SP_VERIFY_SIGNATURES")?
             .parse()
             .map_err(|_| EnvError::VarError("SAML_SP_VERIFY_SIGNATURES"))?,

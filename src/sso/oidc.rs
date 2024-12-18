@@ -83,14 +83,14 @@ pub struct OidcAuthorization {
 }
 
 impl OidcProvider {
-    pub async fn new(config: &OidcConfig) -> Result<OidcProvider, OidcSetupError> {
+    pub async fn new(config: &OidcConfig) -> Result<Self, OidcSetupError> {
         let provider_config = OidcProviderConfiguration::from_url(&config.configuration_url)
             .await?
             .validate(config)?;
 
         let client = reqwest::Client::new();
 
-        Ok(OidcProvider {
+        Ok(Self {
             jwks: Jwks::from_jwks_url(&provider_config.jwks_uri).await?,
             provider_config,
             config: config.clone(),
