@@ -1,8 +1,0 @@
-- logout
-- clean up codebase
-- some random xml error on prod
-
-done:
-- saml to environment variables
-- parse nameid and attributes from saml
-- correct data in index
