@@ -28,7 +28,7 @@ impl Display for LoginMethod {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserAttribute {
     // used only in UI
     pub attribute_type: String,

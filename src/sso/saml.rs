@@ -2,6 +2,7 @@ use crate::env::SamlConfig;
 use crate::models::UserAttribute;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use multimap::MultiMap;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::{Assertion, Subject, SubjectNameID};
@@ -175,20 +176,15 @@ impl SamlServiceProvider {
             ));
         };
 
-        let mut attributes: HashMap<String, UserAttribute> = attribute_statements
+        let mut attributes: MultiMap<String, UserAttribute> = attribute_statements
             .into_iter()
             .flat_map(|attribute_statement| {
                 attribute_statement
                     .attributes
                     .into_iter()
-                    .filter_map(|attribute| {
-                        dbg!(&attribute);
-                        Self::parse_attribute(attribute)
-                    })
+                    .filter_map(|attribute| Self::parse_attribute(attribute))
             })
             .collect();
-
-        dbg!(&attributes);
 
         attributes.insert(
             "name".to_string(),
@@ -198,29 +194,38 @@ impl SamlServiceProvider {
             },
         );
 
-        Ok(attributes)
+        Ok(attributes
+            .into_iter()
+            .filter_map(|(key, value)| Some((key, Self::collapse_user_attributes(value)?)))
+            .collect())
     }
 
     fn parse_attribute(attribute: Attribute) -> Option<(String, UserAttribute)> {
+        let attributes_iter = attribute.values.into_iter().filter_map(|value| {
+            Some(UserAttribute {
+                value: value.value?,
+                attribute_type: value.attribute_type.unwrap_or("String".to_string()),
+            })
+        });
+
         Some((
             attribute.friendly_name.or(attribute.name)?,
-            attribute
-                .values
-                .into_iter()
-                .filter_map(|value| {
-                    Some(UserAttribute {
-                        value: value.value?,
-                        attribute_type: value.attribute_type.unwrap_or("String".to_string()),
-                    })
-                })
-                // potential loss of type info
-                //  we hope that type is the same for attribute with same name
-                .reduce(|mut acc, curr| {
-                    acc.value.push_str(", ");
-                    acc.value.push_str(&curr.value);
-
-                    acc
-                })?,
+            Self::collapse_user_attributes(attributes_iter)?,
         ))
+    }
+
+    // potential loss of type info
+    //  we hope that type is the same for attribute with same name
+    // None if supplied list is empty
+    fn collapse_user_attributes<T>(attributes: T) -> Option<UserAttribute>
+    where
+        T: IntoIterator<Item = UserAttribute>,
+    {
+        attributes.into_iter().reduce(|mut acc, curr| {
+            acc.value.push_str(", ");
+            acc.value.push_str(&curr.value);
+
+            acc
+        })
     }
 }
