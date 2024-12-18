@@ -16,10 +16,7 @@ pub async fn saml_login(
         .make_authentication_request(&saml_sp.sso_binding_location(HTTP_REDIRECT_BINDING).unwrap())
         .unwrap();
 
-    let redir = auth_request
-        .redirect(&session.session.id().unwrap().to_string())
-        .unwrap()
-        .unwrap();
+    let redir = auth_request.redirect("").unwrap().unwrap();
 
     let res = LoginSession::update_session(
         &session.session,

@@ -49,21 +49,43 @@ async fn main() -> anyhow::Result<()> {
         .expect("index route should be present");
 
     let idp_meta: EntityDescriptor = samael::metadata::de::from_str(
-        &reqwest::get(
-            "https://keycloak.rhel.local.antony.cloud/realms/master/protocol/saml/descriptor",
-        )
-        .await?
-        .text()
-        .await?,
+        &reqwest::get(&env.saml_config.idp_metadata_url)
+            .await?
+            .text()
+            .await?,
     )?;
 
-    let saml_sp = samael::service_provider::ServiceProviderBuilder::default()
-        .entity_id("saml-demo".to_string())
+    let mut saml_sp = samael::service_provider::ServiceProviderBuilder::default()
+        .entity_id(env.saml_config.entity_id.to_string())
         .allow_idp_initiated(false)
         .idp_metadata(idp_meta)
-        .acs_url("http://localhost:3000/saml/acs".to_string())
-        .slo_url("http://localhost:3000/saml/slo".to_string())
+        .acs_url(env.saml_config.acs_url.to_string())
+        .slo_url(env.saml_config.slo_url.to_string())
         .build()?;
+
+    // a very weird way of removing signing certificates from the IDP metadata
+    //  if the SAML client is configured to not sign responses on IDP side,
+    //  IDP might still include it's signing keys in the metadata
+    //  and the samael library will try to automatically validate the signatures
+    //  if keys are present in the metadata
+    if !env.saml_config.verify_signatures {
+        saml_sp.idp_metadata.idp_sso_descriptors =
+            saml_sp.idp_metadata.idp_sso_descriptors.map(|descriptors| {
+                descriptors
+                    .into_iter()
+                    .map(|mut descriptor| {
+                        descriptor.key_descriptors.retain(|key_descriptor| {
+                            key_descriptor
+                                .key_use
+                                .as_ref()
+                                .map(|key_use| key_use != "signing")
+                                .unwrap_or(true)
+                        });
+                        descriptor
+                    })
+                    .collect()
+            })
+    }
 
     // setup state
     let state = Arc::new(AppState {

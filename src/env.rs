@@ -20,10 +20,20 @@ pub struct OidcConfig {
     pub scopes: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SamlConfig {
+    pub idp_metadata_url: String,
+    pub entity_id: String,
+    pub acs_url: String,
+    pub slo_url: String,
+    pub verify_signatures: bool,
+}
+
 #[derive(Debug)]
 pub struct Environment {
     pub port: u16,
     pub oidc_config: OidcConfig,
+    pub saml_config: SamlConfig,
 }
 
 #[derive(Debug, Error)]
@@ -84,11 +94,24 @@ fn init_oidc_config() -> Result<OidcConfig, EnvError> {
     })
 }
 
+fn init_saml_config() -> Result<SamlConfig, EnvError> {
+    Ok(SamlConfig {
+        idp_metadata_url: get_env("SAML_IDP_METADATA_URL")?,
+        entity_id: get_env("SAML_SP_ENTITY_ID")?,
+        acs_url: get_env("SAML_SP_ACS_URL")?,
+        slo_url: get_env("SAML_SP_SLO_URL")?,
+        verify_signatures: get_env("SAML_SP_VERIFY_SIGNATURES")?
+            .parse()
+            .map_err(|_| EnvError::VarError("SAML_SP_VERIFY_SIGNATURES"))?,
+    })
+}
+
 pub fn init_env() -> Result<Environment, EnvError> {
     dotenv::dotenv().ok();
 
     Ok(Environment {
         port: get_env("PORT")?.parse()?,
         oidc_config: init_oidc_config()?,
+        saml_config: init_saml_config()?,
     })
 }
