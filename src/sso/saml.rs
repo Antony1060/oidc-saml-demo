@@ -2,7 +2,7 @@ use crate::env::SamlConfig;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
-use samael::schema::AuthnRequest;
+use samael::schema::{Assertion, Subject, SubjectNameID};
 use samael::service_provider::ServiceProvider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -48,11 +48,11 @@ pub enum SamlError {
     #[error("Failed to parse UTF-8: {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
 
-    #[error("Failed to parse XML: {0}")]
-    XmlParseError(#[from] serde_xml_rs::Error),
-
     #[error("Failed to validate SAML response: {0}")]
     SamlValidationFailed(#[from] samael::service_provider::Error),
+
+    #[error("Failed to process SAML response: {0}")]
+    SamaelError(#[from] Box<dyn std::error::Error>),
 
     #[error("{0}")]
     CustomError(String),
@@ -60,7 +60,6 @@ pub enum SamlError {
 
 #[derive(Debug)]
 pub struct SamlAuthenticationRequest {
-    pub raw: AuthnRequest,
     pub id: String,
     pub url: Url,
 }
@@ -128,7 +127,6 @@ impl SamlServiceProvider {
         Ok(SamlAuthenticationRequest {
             id: authn_request.id.clone(),
             url,
-            raw: authn_request,
         })
     }
 
@@ -140,20 +138,63 @@ impl SamlServiceProvider {
         let bytes = BASE64_STANDARD.decode(raw_base64)?;
         let decoded = std::str::from_utf8(&bytes)?;
 
-        // validates signatures etc.
-        self.sp
+        let assertion = self
+            .sp
             .parse_xml_response(decoded, Some(&[in_response_to]))?;
 
-        let response_parsed = serde_xml_rs::from_str(decoded)?;
-
-        dbg!(response_parsed);
+        let attributes = self.parse_authentication_response_attributes(assertion)?;
 
         Ok(SamlAuthorization {
-            attributes: HashMap::from([
-                ("name".to_string(), "Antonio Fran Trstenjak".to_string()),
-                ("email".to_string(), "antony@local.antony.cloud".to_string()),
-            ]),
+            attributes,
             logout_url: "/saml/slo".to_string(),
         })
+    }
+
+    fn parse_authentication_response_attributes(
+        &self,
+        assertion: Assertion,
+    ) -> Result<HashMap<String, String>, SamlError> {
+        let Some(Subject {
+            name_id:
+                Some(SubjectNameID {
+                    value: subject_name,
+                    ..
+                }),
+            ..
+        }) = assertion.subject
+        else {
+            return Err(SamlError::CustomError(
+                "Failed to parse assertion".to_string(),
+            ));
+        };
+
+        let Some(attribute_statements) = assertion.attribute_statements else {
+            return Err(SamlError::CustomError(
+                "Failed to parse attributes".to_string(),
+            ));
+        };
+
+        let mut attributes: HashMap<String, String> = attribute_statements
+            .into_iter()
+            .flat_map(|attribute_statement| {
+                attribute_statement
+                    .attributes
+                    .into_iter()
+                    .filter_map(|attribute| {
+                        Some((
+                            attribute.friendly_name?,
+                            attribute
+                                .values
+                                .into_iter()
+                                .filter_map(|value| value.value)
+                                .reduce(|acc, value| format!("{}, {}", acc, value))?,
+                        ))
+                    })
+            })
+            .collect();
+
+        attributes.insert("name".to_string(), subject_name);
+
+        Ok(attributes)
     }
 }
