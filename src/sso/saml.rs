@@ -10,7 +10,7 @@ use samael::service_provider::{DestinationVariant, SamlRedirect, ServiceProvider
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use url::Url;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -114,11 +114,21 @@ impl SamlServiceProvider {
 
         let private_key = PKey::private_key_from_pem(&private_key_bytes)?;
 
-        if private_key.ec_key().is_err() && private_key.rsa().is_err() {
+        if private_key.rsa().is_err() && private_key.dsa().is_err() {
             return Err(SamlSetupError::CustomError(
-                "Unsupported private key type".to_string(),
+                "Unsupported private key type, should be RSA or DSA".to_string(),
             ));
         }
+
+        info!(
+            "Using {} private key for SAML signatures",
+            private_key
+                .rsa()
+                .is_ok()
+                .then_some("RSA")
+                .or_else(|| private_key.dsa().is_ok().then_some("DSA"))
+                .unwrap_or("unknown")
+        );
 
         let sp = samael::service_provider::ServiceProviderBuilder::default()
             .entity_id(config.entity_id.clone())
