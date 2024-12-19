@@ -1,19 +1,14 @@
 use crate::env::SamlConfig;
 use crate::models::UserAttribute;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
 use chrono::Utc;
-use flate2::{write::DeflateEncoder, Compression};
 use multimap::MultiMap;
 use openssl::pkey::PKey;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::{Assertion, Issuer, LogoutRequest, NameID, Subject};
-use samael::service_provider::{DestinationVariant, Error as SamaelSPError, ServiceProvider};
-use samael::traits::ToXml;
+use samael::service_provider::{DestinationVariant, SamlRedirect, ServiceProvider};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
 use thiserror::Error;
 use tracing::{debug, warn};
 use url::Url;
@@ -174,7 +169,7 @@ impl SamlServiceProvider {
         authn_request.id = Self::make_openssl_rand_id()?;
 
         let url = authn_request
-            .signed_redirect("", self.private_key.clone())?
+            .signed_redirect(None, self.private_key.clone())?
             .ok_or(SamlError::CustomError(
                 "Failed to make signed authentication request".to_string(),
             ))?;
@@ -225,9 +220,11 @@ impl SamlServiceProvider {
             session_index: authentication.session_index.clone(),
         };
 
-        let url = Self::signed_redirect(&logout_request, None, self.private_key.clone())?.ok_or(
-            SamlError::CustomError("Failed to make signed logout request".to_string()),
-        )?;
+        let url = logout_request
+            .signed_redirect(None, self.private_key.clone())?
+            .ok_or(SamlError::CustomError(
+                "Failed to make signed logout request".to_string(),
+            ))?;
 
         Ok((request_id, url))
     }
@@ -340,76 +337,5 @@ impl SamlServiceProvider {
         })?;
 
         Ok(hex::encode(buffer))
-    }
-
-    // these 2 functions are copied (and slightly modified) from samael source for AuthnRequest
-    //  used only for LogoutRequest, since it's not natively in samael
-    // NOTE(antony): might be worth making a PR for this
-    fn redirect(
-        request: &LogoutRequest,
-        relay_state: Option<&str>,
-    ) -> Result<Option<Url>, Box<dyn std::error::Error>> {
-        let mut compressed_buf = vec![];
-        {
-            let mut encoder = DeflateEncoder::new(&mut compressed_buf, Compression::default());
-            encoder.write_all(request.to_string()?.as_bytes())?;
-        }
-        let encoded = BASE64_STANDARD.encode(&compressed_buf);
-
-        if let Some(destination) = request.destination.as_ref() {
-            let mut url: Url = destination.parse()?;
-            url.query_pairs_mut().append_pair("SAMLRequest", &encoded);
-            if let Some(relay_state) = relay_state {
-                url.query_pairs_mut().append_pair("RelayState", relay_state);
-            }
-            Ok(Some(url))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn signed_redirect(
-        request: &LogoutRequest,
-        relay_state: Option<&str>,
-        private_key: PKey<openssl::pkey::Private>,
-    ) -> Result<Option<Url>, Box<dyn std::error::Error>> {
-        let unsigned_url = Self::redirect(request, relay_state)?;
-
-        let Some(mut unsigned_url) = unsigned_url else {
-            return Ok(unsigned_url);
-        };
-
-        if private_key.ec_key().is_ok() {
-            unsigned_url.query_pairs_mut().append_pair(
-                "SigAlg",
-                "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256",
-            );
-        } else if private_key.rsa().is_ok() {
-            unsigned_url.query_pairs_mut().append_pair(
-                "SigAlg",
-                "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
-            );
-        } else {
-            return Err(SamaelSPError::UnsupportedKey)?;
-        }
-
-        let string_to_sign: String = unsigned_url
-            .query()
-            .ok_or(SamaelSPError::UnexpectedError)?
-            .to_string();
-
-        let pkey = private_key;
-
-        let mut signer =
-            openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), pkey.as_ref())?;
-
-        signer.update(string_to_sign.as_bytes())?;
-
-        unsigned_url
-            .query_pairs_mut()
-            .append_pair("Signature", &BASE64_STANDARD.encode(signer.sign_to_vec()?));
-
-        // Past this point, it's a signed url :)
-        Ok(Some(unsigned_url))
     }
 }

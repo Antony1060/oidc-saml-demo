@@ -27,8 +27,6 @@ pub async fn saml_slo_get(
         Ok(val) => val,
     };
 
-    println!("respondez vous {}", request_id);
-
     let res = LoginSession::update_session(
         &session.session,
         &LoginSessionData::SAML(SamlState::LogoutPending { request_id }),
