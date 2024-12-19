@@ -2,29 +2,45 @@ use crate::env::SamlConfig;
 use crate::models::UserAttribute;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use chrono::Utc;
+use flate2::{write::DeflateEncoder, Compression};
 use multimap::MultiMap;
 use openssl::pkey::PKey;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
-use samael::schema::{Assertion, Subject, SubjectNameID};
-use samael::service_provider::ServiceProvider;
+use samael::schema::{Assertion, Issuer, LogoutRequest, NameID, Subject, SubjectNameID};
+use samael::service_provider::{Error as SamaelSPError, ServiceProvider};
+use samael::traits::ToXml;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SamlNameId {
+    pub value: String,
+    pub format: Option<String>,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, serde::Deserialize)]
+pub struct SamlResponse {
+    pub SAMLResponse: Option<String>,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SamlAuthorization {
     pub attributes: HashMap<String, UserAttribute>,
-    // TODO: improve with logout request
-    pub logout_url: String,
+    pub subject_name_id: SamlNameId,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum SamlState {
     Pending { request_id: String },
     LoggedIn(SamlAuthorization),
+    LogoutPending { request_id: String },
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -142,7 +158,7 @@ impl SamlServiceProvider {
     }
 
     pub fn make_authentication_request(&self) -> Result<SamlAuthenticationRequest, SamlError> {
-        let authn_request = self.sp.make_authentication_request(
+        let mut authn_request = self.sp.make_authentication_request(
             &self
                 .sp
                 .sso_binding_location(HTTP_REDIRECT_BINDING)
@@ -151,9 +167,13 @@ impl SamlServiceProvider {
                 })?,
         )?;
 
+        authn_request.id = Self::make_openssl_rand_id()?;
+
         let url = authn_request
             .signed_redirect("", self.private_key.clone())?
-            .unwrap();
+            .ok_or(SamlError::CustomError(
+                "Failed to make signed authentication request".to_string(),
+            ))?;
 
         Ok(SamlAuthenticationRequest {
             id: authn_request.id.clone(),
@@ -166,30 +186,72 @@ impl SamlServiceProvider {
         raw_base64: &str,
         in_response_to: &str,
     ) -> Result<SamlAuthorization, SamlError> {
-        let bytes = BASE64_STANDARD.decode(raw_base64)?;
-        let decoded = std::str::from_utf8(&bytes)?;
-
         let assertion = self
             .sp
-            .parse_xml_response(decoded, Some(&[in_response_to]))?;
+            .parse_base64_response(raw_base64, Some(&[in_response_to]))?;
 
-        let attributes = Self::parse_authentication_response_attributes(assertion)?;
+        let (name_id, attributes) = Self::parse_authentication_response_attributes(assertion)?;
 
         Ok(SamlAuthorization {
             attributes,
-            logout_url: "/saml/slo".to_string(),
+            subject_name_id: SamlNameId {
+                value: name_id.value,
+                format: name_id.format,
+            },
         })
+    }
+
+    pub fn process_logout_response(
+        &self,
+        raw_base64: &str,
+        in_response_to: &str,
+    ) -> Result<(), SamlError> {
+        let assertion = self
+            .sp
+            .parse_base64_response(raw_base64, Some(&[in_response_to]))?;
+
+        dbg!(&assertion);
+
+        Ok(())
+    }
+
+    pub fn make_logout_request(
+        &self,
+        target_name_id: &SamlNameId,
+    ) -> Result<(String, Url), SamlError> {
+        let request_id = Self::make_openssl_rand_id()?;
+
+        // not natively supported in samael :/
+        let logout_request = LogoutRequest {
+            id: Some(Self::make_openssl_rand_id()?),
+            version: Some("2.0".to_string()),
+            issue_instant: Some(Utc::now()),
+            destination: self.sp.slo_binding_location(HTTP_REDIRECT_BINDING),
+            issuer: Some(Issuer {
+                format: Some("urn:oasis:names:tc:SAML:2.0:nameid-format:entity".to_string()),
+                value: self.sp.entity_id.clone(),
+                ..Issuer::default()
+            }),
+            signature: None,
+            name_id: Some(NameID {
+                value: target_name_id.value.clone(),
+                format: target_name_id.format.clone(),
+            }),
+            session_index: None,
+        };
+
+        let url = Self::signed_redirect(&logout_request, None, self.private_key.clone())?.ok_or(
+            SamlError::CustomError("Failed to make signed logout request".to_string()),
+        )?;
+
+        Ok((request_id, url))
     }
 
     fn parse_authentication_response_attributes(
         assertion: Assertion,
-    ) -> Result<HashMap<String, UserAttribute>, SamlError> {
+    ) -> Result<(SubjectNameID, HashMap<String, UserAttribute>), SamlError> {
         let Some(Subject {
-            name_id:
-                Some(SubjectNameID {
-                    value: subject_name,
-                    ..
-                }),
+            name_id: Some(subject_name_id),
             ..
         }) = assertion.subject
         else {
@@ -218,14 +280,17 @@ impl SamlServiceProvider {
             "name".to_string(),
             UserAttribute {
                 attribute_type: "xs:string".to_string(),
-                value: subject_name,
+                value: subject_name_id.value.clone(),
             },
         );
 
-        Ok(attributes
-            .into_iter()
-            .filter_map(|(key, value)| Some((key, Self::collapse_user_attributes(value)?)))
-            .collect())
+        Ok((
+            subject_name_id,
+            attributes
+                .into_iter()
+                .filter_map(|(key, value)| Some((key, Self::collapse_user_attributes(value)?)))
+                .collect(),
+        ))
     }
 
     fn parse_attribute(attribute: Attribute) -> Option<(String, UserAttribute)> {
@@ -255,5 +320,86 @@ impl SamlServiceProvider {
 
             acc
         })
+    }
+
+    fn make_openssl_rand_id() -> Result<String, SamlError> {
+        let mut buffer = [0; 16];
+        openssl::rand::rand_bytes(&mut buffer).map_err(|errs| {
+            warn!("OpenSSL rand error: {errs:?}");
+            SamlError::CustomError("Failed to generate openssl random id".to_string())
+        })?;
+
+        Ok(hex::encode(buffer))
+    }
+
+    // these 2 functions are copied (and slightly modified) from samael source for AuthnRequest
+    //  used only for LogoutRequest, since it's not natively in samael
+    // NOTE(antony): might be worth making a PR for this
+    fn redirect(
+        request: &LogoutRequest,
+        relay_state: Option<&str>,
+    ) -> Result<Option<Url>, Box<dyn std::error::Error>> {
+        let mut compressed_buf = vec![];
+        {
+            let mut encoder = DeflateEncoder::new(&mut compressed_buf, Compression::default());
+            encoder.write_all(request.to_string()?.as_bytes())?;
+        }
+        let encoded = BASE64_STANDARD.encode(&compressed_buf);
+
+        if let Some(destination) = request.destination.as_ref() {
+            let mut url: Url = destination.parse()?;
+            url.query_pairs_mut().append_pair("SAMLRequest", &encoded);
+            if let Some(relay_state) = relay_state {
+                url.query_pairs_mut().append_pair("RelayState", relay_state);
+            }
+            Ok(Some(url))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn signed_redirect(
+        request: &LogoutRequest,
+        relay_state: Option<&str>,
+        private_key: PKey<openssl::pkey::Private>,
+    ) -> Result<Option<Url>, Box<dyn std::error::Error>> {
+        let unsigned_url = Self::redirect(request, relay_state)?;
+
+        let Some(mut unsigned_url) = unsigned_url else {
+            return Ok(unsigned_url);
+        };
+
+        if private_key.ec_key().is_ok() {
+            unsigned_url.query_pairs_mut().append_pair(
+                "SigAlg",
+                "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256",
+            );
+        } else if private_key.rsa().is_ok() {
+            unsigned_url.query_pairs_mut().append_pair(
+                "SigAlg",
+                "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+            );
+        } else {
+            return Err(SamaelSPError::UnsupportedKey)?;
+        }
+
+        let string_to_sign: String = unsigned_url
+            .query()
+            .ok_or(SamaelSPError::UnexpectedError)?
+            .to_string();
+
+        let pkey = private_key;
+
+        let mut signer =
+            openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), pkey.as_ref())?;
+
+        signer.update(string_to_sign.as_bytes())?;
+
+        unsigned_url
+            .query_pairs_mut()
+            .append_pair("Signature", &BASE64_STANDARD.encode(signer.sign_to_vec()?));
+
+        // Past this point, it's a signed url :)
+        Ok(Some(unsigned_url))
     }
 }

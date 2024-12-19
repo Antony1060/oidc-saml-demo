@@ -65,20 +65,18 @@ async fn main() -> anyhow::Result<()> {
         // OIDC callback and logout paths are applied from the environment
         .route(
             &oidc_config.redirect_uri.path,
-            get(routes::oidc::callback::handle_callback),
+            get(routes::oidc::callback::oidc_callback),
         )
         .route(
             &oidc_config.logout_redirect_uri.path,
             get(routes::oidc::logout::oidc_logout),
         )
-        .route("/oidc/login", get(routes::oidc::login::oidc_login))
-        .nest(
-            "/saml",
-            Router::new()
-                .route("/login", get(routes::saml::login::saml_login))
-                .route("/acs", post(routes::saml::acs::saml_acs))
-                .route("/slo", get(routes::saml::slo::saml_slo)),
+        .route(
+            &saml_config.acs_url.path,
+            get(routes::saml::acs::saml_acs_get),
         )
+        .route(&saml_config.acs_url.path, post(routes::saml::acs::saml_acs))
+        .route(&saml_config.slo_url.path, get(routes::saml::slo::saml_slo))
         .fallback(routes::four_oh_four::handle_404)
         .layer(session_layer)
         .with_state(state.clone());

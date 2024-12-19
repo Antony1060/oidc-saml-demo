@@ -4,7 +4,10 @@ use serde::Serialize;
 
 #[derive(Template, Serialize)]
 #[template(path = "login.html")]
-pub struct LoginTemplate;
+pub struct LoginTemplate {
+    pub oidc_login_url: String,
+    pub saml_login_url: String,
+}
 
 #[derive(Template, Serialize)]
 #[template(path = "logged-in.html")]

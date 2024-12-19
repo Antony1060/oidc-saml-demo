@@ -20,9 +20,6 @@ pub async fn handle_index(
     session: LoginSession,
 ) -> impl IntoResponse {
     let provider_data = match session.data {
-        LoginSessionData::None | LoginSessionData::SAML(SamlState::Pending { .. }) => {
-            return LoginTemplate.into_response()
-        }
         LoginSessionData::OIDC(oidc) => match get_oidc_data(&state.oidc, &oidc).await {
             Ok(userinfo) => userinfo,
             Err(_) => {
@@ -36,8 +33,15 @@ pub async fn handle_index(
         LoginSessionData::SAML(SamlState::LoggedIn(saml)) => ProviderData {
             login_method: LoginMethod::SAML,
             userinfo: saml.attributes,
-            logout_url: saml.logout_url.clone(),
+            logout_url: state.environment.saml_config.slo_url.path.to_string(),
         },
+        _ => {
+            return LoginTemplate {
+                oidc_login_url: state.environment.oidc_config.redirect_uri.path.to_string(),
+                saml_login_url: state.environment.saml_config.acs_url.path.to_string(),
+            }
+            .into_response()
+        }
     };
 
     let userinfo = provider_data.userinfo;
