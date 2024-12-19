@@ -9,7 +9,7 @@ use openssl::pkey::PKey;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::{Assertion, Issuer, LogoutRequest, NameID, Subject};
-use samael::service_provider::{Error as SamaelSPError, ServiceProvider};
+use samael::service_provider::{DestinationVariant, Error as SamaelSPError, ServiceProvider};
 use samael::traits::ToXml;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -81,6 +81,9 @@ pub enum SamlError {
 
     #[error("Failed to parse UTF-8: {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
+
+    #[error("IO Error: {0}")]
+    IoError(#[from] std::io::Error),
 
     #[error("Failed to validate SAML response: {0}")]
     SamlValidationFailed(#[from] samael::service_provider::Error),
@@ -189,23 +192,12 @@ impl SamlServiceProvider {
     ) -> Result<SamlAuthentication, SamlError> {
         let assertion = self
             .sp
-            .parse_base64_response(raw_base64, Some(&[in_response_to]))?;
+            .parse_base64_response(raw_base64, Some(&[in_response_to]), DestinationVariant::Acs)?
+            .ok_or(SamlError::CustomError(
+                "Assertion missing in SAML response".to_string(),
+            ))?;
 
         Self::parse_authentication_assertion(assertion)
-    }
-
-    pub fn process_logout_response(
-        &self,
-        raw_base64: &str,
-        in_response_to: &str,
-    ) -> Result<(), SamlError> {
-        let assertion = self
-            .sp
-            .parse_base64_response(raw_base64, Some(&[in_response_to]))?;
-
-        dbg!(&assertion);
-
-        Ok(())
     }
 
     pub fn make_logout_request(
@@ -216,7 +208,7 @@ impl SamlServiceProvider {
 
         // not natively supported in samael :/
         let logout_request = LogoutRequest {
-            id: Some(Self::make_openssl_rand_id()?),
+            id: Some(request_id.clone()),
             version: Some("2.0".to_string()),
             issue_instant: Some(Utc::now()),
             destination: self.sp.slo_binding_location(HTTP_REDIRECT_BINDING),
@@ -238,6 +230,20 @@ impl SamlServiceProvider {
         )?;
 
         Ok((request_id, url))
+    }
+
+    pub fn process_logout_response(
+        &self,
+        raw_base64: &str,
+        in_response_to: &str,
+    ) -> Result<(), SamlError> {
+        self.sp.parse_base64_response(
+            raw_base64,
+            Some(&[in_response_to]),
+            DestinationVariant::Slo,
+        )?;
+
+        Ok(())
     }
 
     fn parse_authentication_assertion(

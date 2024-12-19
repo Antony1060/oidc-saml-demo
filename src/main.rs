@@ -1,11 +1,8 @@
 use crate::env::init_env;
 use crate::state::AppState;
 use crate::tracing::setup_tracing;
-use askama_axum::IntoResponse;
-use axum::extract::State;
 use axum::routing::{get, post};
 use axum::Router;
-use samael::traits::ToXml;
 use std::sync::Arc;
 use tower_sessions::cookie::SameSite;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
@@ -18,15 +15,6 @@ mod sso;
 mod state;
 mod templates;
 mod tracing;
-
-async fn metadata(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let metadata = state.saml.sp.metadata().unwrap();
-
-    axum::http::Response::builder()
-        .header("Content-Type", "application/xml")
-        .body(metadata.to_string().unwrap())
-        .unwrap()
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -83,13 +71,17 @@ async fn main() -> anyhow::Result<()> {
             &oidc_config.logout_redirect_uri.path,
             get(routes::oidc::logout::oidc_logout),
         )
+        // same with SAML
         .route(
             &saml_config.acs_url.path,
             get(routes::saml::acs::saml_acs_get),
         )
         .route(&saml_config.acs_url.path, post(routes::saml::acs::saml_acs))
-        .route(&saml_config.slo_url.path, get(routes::saml::slo::saml_slo))
-        .route("/saml/metadata", get(metadata))
+        .route(
+            &saml_config.slo_url.path,
+            get(routes::saml::slo::saml_slo_get),
+        )
+        .route(&saml_config.slo_url.path, post(routes::saml::slo::saml_slo))
         .fallback(routes::four_oh_four::handle_404)
         .layer(session_layer)
         .with_state(state.clone());

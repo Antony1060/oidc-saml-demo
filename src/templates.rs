@@ -1,5 +1,5 @@
 use crate::models::{LoginMethod, UserAttribute};
-use askama::Template;
+use askama_axum::Template;
 use serde::Serialize;
 
 #[derive(Template, Serialize)]
