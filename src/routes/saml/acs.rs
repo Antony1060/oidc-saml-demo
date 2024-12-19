@@ -51,7 +51,7 @@ pub async fn saml_acs(
         return Redirect::to(&state.index_path).into_response();
     };
 
-    let authorization = state
+    let authentication = state
         .saml
         .process_authentication_response(&saml_response, &request_id)
         .map_err(|err| {
@@ -61,7 +61,7 @@ pub async fn saml_acs(
             )
         });
 
-    match authorization {
+    match authentication {
         Ok(authorization) => {
             let res = LoginSession::update_session(
                 &session.session,

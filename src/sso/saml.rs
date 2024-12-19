@@ -8,7 +8,7 @@ use multimap::MultiMap;
 use openssl::pkey::PKey;
 use samael::attribute::Attribute;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
-use samael::schema::{Assertion, Issuer, LogoutRequest, NameID, Subject, SubjectNameID};
+use samael::schema::{Assertion, Issuer, LogoutRequest, NameID, Subject};
 use samael::service_provider::{Error as SamaelSPError, ServiceProvider};
 use samael::traits::ToXml;
 use serde::{Deserialize, Serialize};
@@ -31,15 +31,16 @@ pub struct SamlResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct SamlAuthorization {
+pub struct SamlAuthentication {
     pub attributes: HashMap<String, UserAttribute>,
     pub subject_name_id: SamlNameId,
+    pub session_index: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum SamlState {
     Pending { request_id: String },
-    LoggedIn(SamlAuthorization),
+    LoggedIn(SamlAuthentication),
     LogoutPending { request_id: String },
 }
 
@@ -69,7 +70,7 @@ pub enum SamlPrivateKeyType {
 }
 
 pub struct SamlServiceProvider {
-    sp: ServiceProvider,
+    pub sp: ServiceProvider,
     private_key: PKey<openssl::pkey::Private>,
 }
 
@@ -185,20 +186,12 @@ impl SamlServiceProvider {
         &self,
         raw_base64: &str,
         in_response_to: &str,
-    ) -> Result<SamlAuthorization, SamlError> {
+    ) -> Result<SamlAuthentication, SamlError> {
         let assertion = self
             .sp
             .parse_base64_response(raw_base64, Some(&[in_response_to]))?;
 
-        let (name_id, attributes) = Self::parse_authentication_response_attributes(assertion)?;
-
-        Ok(SamlAuthorization {
-            attributes,
-            subject_name_id: SamlNameId {
-                value: name_id.value,
-                format: name_id.format,
-            },
-        })
+        Self::parse_authentication_assertion(assertion)
     }
 
     pub fn process_logout_response(
@@ -217,7 +210,7 @@ impl SamlServiceProvider {
 
     pub fn make_logout_request(
         &self,
-        target_name_id: &SamlNameId,
+        authentication: &SamlAuthentication,
     ) -> Result<(String, Url), SamlError> {
         let request_id = Self::make_openssl_rand_id()?;
 
@@ -234,10 +227,10 @@ impl SamlServiceProvider {
             }),
             signature: None,
             name_id: Some(NameID {
-                value: target_name_id.value.clone(),
-                format: target_name_id.format.clone(),
+                value: authentication.subject_name_id.value.clone(),
+                format: authentication.subject_name_id.format.clone(),
             }),
-            session_index: None,
+            session_index: authentication.session_index.clone(),
         };
 
         let url = Self::signed_redirect(&logout_request, None, self.private_key.clone())?.ok_or(
@@ -247,9 +240,9 @@ impl SamlServiceProvider {
         Ok((request_id, url))
     }
 
-    fn parse_authentication_response_attributes(
+    fn parse_authentication_assertion(
         assertion: Assertion,
-    ) -> Result<(SubjectNameID, HashMap<String, UserAttribute>), SamlError> {
+    ) -> Result<SamlAuthentication, SamlError> {
         let Some(Subject {
             name_id: Some(subject_name_id),
             ..
@@ -284,13 +277,24 @@ impl SamlServiceProvider {
             },
         );
 
-        Ok((
-            subject_name_id,
-            attributes
+        let session_index = assertion.authn_statements.and_then(|statements| {
+            statements
+                .into_iter()
+                .filter_map(|statement| statement.session_index)
+                .next()
+        });
+
+        Ok(SamlAuthentication {
+            subject_name_id: SamlNameId {
+                value: subject_name_id.value,
+                format: subject_name_id.format,
+            },
+            attributes: attributes
                 .into_iter()
                 .filter_map(|(key, value)| Some((key, Self::collapse_user_attributes(value)?)))
                 .collect(),
-        ))
+            session_index,
+        })
     }
 
     fn parse_attribute(attribute: Attribute) -> Option<(String, UserAttribute)> {

@@ -76,7 +76,7 @@ impl OidcProviderConfiguration {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct OidcAuthorization {
+pub struct OidcAuthentication {
     pub id_token: String,
     pub access_token: String,
     pub token_type: String,
@@ -144,7 +144,7 @@ impl OidcProvider {
         decoded.is_ok()
     }
 
-    pub async fn authorize(&self, code: &str) -> Result<OidcAuthorization, reqwest::Error> {
+    pub async fn authorize(&self, code: &str) -> Result<OidcAuthentication, reqwest::Error> {
         let data = self
             .http_client
             .post(&self.provider_config.token_endpoint)
@@ -157,7 +157,7 @@ impl OidcProvider {
             ])
             .send()
             .await?
-            .json::<OidcAuthorization>()
+            .json::<OidcAuthentication>()
             .await?;
 
         Ok(data)
@@ -165,7 +165,7 @@ impl OidcProvider {
 
     pub async fn userinfo(
         &self,
-        authorization: &OidcAuthorization,
+        authentication: &OidcAuthentication,
     ) -> Result<HashMap<String, serde_json::Value>, reqwest::Error> {
         let data = self
             .http_client
@@ -174,7 +174,7 @@ impl OidcProvider {
                 reqwest::header::AUTHORIZATION,
                 format!(
                     "{} {}",
-                    authorization.token_type, authorization.access_token
+                    authentication.token_type, authentication.access_token
                 ),
             )
             .send()

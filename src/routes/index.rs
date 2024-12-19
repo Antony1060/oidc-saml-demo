@@ -1,5 +1,5 @@
 use crate::models::{LoginMethod, LoginSession, LoginSessionData, UserAttribute};
-use crate::sso::oidc::{OidcAuthorization, OidcProvider};
+use crate::sso::oidc::{OidcAuthentication, OidcProvider};
 use crate::sso::saml::SamlState;
 use crate::state::AppState;
 use crate::templates::{LoggedInTemplate, LoginTemplate};
@@ -84,9 +84,9 @@ pub async fn handle_index(
 
 async fn get_oidc_data(
     oidc: &OidcProvider,
-    oidc_authorization: &OidcAuthorization,
+    oidc_authentication: &OidcAuthentication,
 ) -> Result<ProviderData, reqwest::Error> {
-    let userinfo = oidc.userinfo(oidc_authorization).await?;
+    let userinfo = oidc.userinfo(oidc_authentication).await?;
 
     let userinfo = userinfo
         .into_iter()
@@ -120,6 +120,6 @@ async fn get_oidc_data(
     Ok(ProviderData {
         login_method: LoginMethod::OIDC,
         userinfo,
-        logout_url: oidc.logout_url(&oidc_authorization.id_token),
+        logout_url: oidc.logout_url(&oidc_authentication.id_token),
     })
 }

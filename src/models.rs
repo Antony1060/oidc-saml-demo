@@ -1,4 +1,4 @@
-use crate::sso::oidc::OidcAuthorization;
+use crate::sso::oidc::OidcAuthentication;
 use crate::sso::saml::SamlState;
 use axum::async_trait;
 use axum::extract::FromRequestParts;
@@ -40,7 +40,7 @@ pub struct UserAttribute {
 pub enum LoginSessionData {
     #[default]
     None,
-    OIDC(OidcAuthorization),
+    OIDC(OidcAuthentication),
     SAML(SamlState),
 }
 

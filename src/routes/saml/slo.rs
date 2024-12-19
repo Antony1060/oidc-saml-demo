@@ -16,15 +16,12 @@ pub async fn saml_slo(
     }
 
     if let LoginSessionData::SAML(SamlState::LoggedIn(auth)) = session.data {
-        let logout_url = state
-            .saml
-            .make_logout_request(&auth.subject_name_id)
-            .map_err(|err| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to create SAML logout request: {}", err),
-                )
-            });
+        let logout_url = state.saml.make_logout_request(&auth).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create SAML logout request: {}", err),
+            )
+        });
 
         let (request_id, logout_url) = match logout_url {
             Err(err) => return err.into_response(),
