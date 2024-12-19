@@ -56,12 +56,9 @@ pub enum SamlSetupError {
 
     #[error("Failed to parse private key: {0}")]
     OpensslError(#[from] openssl::error::ErrorStack),
-}
 
-#[derive(Debug, Clone)]
-pub enum SamlPrivateKeyType {
-    Rsa,
-    Ecdsa,
+    #[error("{0}")]
+    CustomError(String),
 }
 
 pub struct SamlServiceProvider {
@@ -115,15 +112,13 @@ impl SamlServiceProvider {
 
         let private_key_bytes = std::fs::read(&config.private_key)?;
 
-        let private_key = match config.private_key_type {
-            SamlPrivateKeyType::Rsa => {
-                PKey::from_rsa(openssl::rsa::Rsa::private_key_from_pem(&private_key_bytes)?)?
-            }
-            // TODO: untested
-            SamlPrivateKeyType::Ecdsa => PKey::from_ec_key(
-                openssl::ec::EcKey::private_key_from_pem(&private_key_bytes)?,
-            )?,
-        };
+        let private_key = PKey::private_key_from_pem(&private_key_bytes)?;
+
+        if private_key.ec_key().is_err() && private_key.rsa().is_err() {
+            return Err(SamlSetupError::CustomError(
+                "Unsupported private key type".to_string(),
+            ));
+        }
 
         let sp = samael::service_provider::ServiceProviderBuilder::default()
             .entity_id(config.entity_id.clone())
